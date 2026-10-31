@@ -376,7 +376,7 @@ func (a *App) fetch(ctx context.Context, address, userAgent string, max int64) (
 	return nil, nil, last
 }
 
-func (a *App) saveProfile(ctx context.Context, profile Profile, content string) (Profile, error) {
+func (a *App) saveProfile(ctx context.Context, profile Profile, content string, expectedRevision ...string) (Profile, error) {
 	if err := a.ensureStorage(); err != nil {
 		return profile, err
 	}
@@ -403,6 +403,9 @@ func (a *App) saveProfile(ctx context.Context, profile Profile, content string) 
 	original, originalErr := os.ReadFile(path)
 	if originalErr != nil && !os.IsNotExist(originalErr) {
 		return profile, originalErr
+	}
+	if len(expectedRevision) > 0 && expectedRevision[0] != "" && (base == nil || profileRevision(base, original) != expectedRevision[0]) {
+		return profile, fmt.Errorf("配置在编辑期间已更新或删除；请保留草稿，重新读取后再编辑")
 	}
 	profile.Name = strings.TrimSpace(profile.Name)
 	if profile.Name == "" || len(profile.Name) > 100 {

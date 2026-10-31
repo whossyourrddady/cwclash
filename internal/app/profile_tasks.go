@@ -3,10 +3,16 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 )
 
 var errProfileBusy = errors.New("此配置正在处理中，请等待完成")
+
+func profileRevision(profile *Profile, raw []byte) string {
+	metadata, _ := json.Marshal(profile)
+	return hashBytes(append(append(metadata, '\n'), raw...))
+}
 
 func (a *App) beginProfileTask(parent context.Context, id string) (context.Context, func(), error) {
 	a.mu.Lock()

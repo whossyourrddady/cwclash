@@ -6,6 +6,7 @@
 | --- | --- | --- | --- |
 | mihomo v1.19.33 | 代理内核，使用官方未修改二进制 | GPL-3.0 | https://github.com/MetaCubeX/mihomo/tree/v1.19.33 |
 | Vue 3.5.44 | 浏览器端界面 | MIT | https://github.com/vuejs/core |
+| yaml 2.9.1 | 浏览器端保留 YAML 结构的可视化编辑 | ISC | https://github.com/eemeli/yaml/tree/v2.9.1 |
 | yaml.v3 v3.0.1 | 本地 YAML 解析与生成 | MIT / Apache-2.0 | https://github.com/go-yaml/yaml/tree/v3.0.1 |
 | ulikunitz/xz v0.5.15 | 核心压缩存储及内存解压 | BSD-3-Clause | https://github.com/ulikunitz/xz/tree/v0.5.15 |
 | Go | 静态编译工具链和标准库 | BSD-3-Clause | https://go.dev/ |

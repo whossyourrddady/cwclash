@@ -284,6 +284,23 @@ func TestNativeProtocolLoopback(t *testing.T) {
 			t.Fatal("changed active profile did not restart core")
 		}
 	})
+	t.Run("editor-invalid-draft-preserves-active-core", func(t *testing.T) {
+		current := *findProfile(a.snapshot(), a.snapshot().ActiveProfile)
+		path := filepath.Join(a.root, "profiles", current.ID+".yaml")
+		before, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		originalCore := a.core
+		bad := "proxies:\n  - {name: broken, type: ss, server: 127.0.0.1, port: 12345, cipher: invalid-cipher, password: fixture}\nrules: [MATCH,DIRECT]\n"
+		if _, err = a.saveProfile(context.Background(), current, bad, profileRevision(&current, before)); err == nil {
+			t.Fatal("invalid editor configuration accepted")
+		}
+		after, err := os.ReadFile(path)
+		if err != nil || string(after) != string(before) || a.core != originalCore || !a.isRunning() {
+			t.Fatal("invalid edit changed active file/core")
+		}
+	})
 	type result struct {
 		Protocol string `json:"protocol"`
 		TCP      bool   `json:"tcp"`

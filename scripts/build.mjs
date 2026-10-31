@@ -78,7 +78,7 @@ function chunk(type,data){const name=Buffer.from(type),length=Buffer.alloc(4),cr
 const ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(width);ihdr.writeUInt32BE(width,4);ihdr[8]=8;ihdr[9]=6
 await writeFile(join(pkg,'res/icon-cwclash.png'),Buffer.concat([Buffer.from('89504e470d0a1a0a','hex'),chunk('IHDR',ihdr),chunk('IDAT',deflateSync(pixels)),chunk('IEND',Buffer.alloc(0))]))
 
-for(const [source,name] of [[join('.tools/go','LICENSE'),'Go-BSD-3-Clause.txt'],[join('web/node_modules/vue','LICENSE'),'Vue-MIT.txt'],[join('web/node_modules/vite','LICENSE.md'),'Vite-LICENSE.txt'],[join('.tools/gomod/gopkg.in/yaml.v3@v3.0.1','LICENSE'),'yaml-v3-LICENSE.txt'],[join('.tools/gomod/github.com/ulikunitz/xz@v0.5.15','LICENSE'),'xz-BSD-3-Clause.txt']]){
+for(const [source,name] of [[join('.tools/go','LICENSE'),'Go-BSD-3-Clause.txt'],[join('web/node_modules/vue','LICENSE'),'Vue-MIT.txt'],[join('web/node_modules/yaml','LICENSE'),'yaml-JS-ISC.txt'],[join('web/node_modules/vite','LICENSE.md'),'Vite-LICENSE.txt'],[join('.tools/gomod/gopkg.in/yaml.v3@v3.0.1','LICENSE'),'yaml-v3-LICENSE.txt'],[join('.tools/gomod/github.com/ulikunitz/xz@v0.5.15','LICENSE'),'xz-BSD-3-Clause.txt']]){
   try{await copyFile(source,join(pkg,'licenses',name))}catch{throw Error(`Missing license: ${source}`)}
 }
 async function files(dir){const out=[];for(const item of await readdir(dir,{withFileTypes:true})){const path=join(dir,item.name);if(item.isDirectory())out.push(...await files(path));else if(item.isFile())out.push(path);else throw Error('Unexpected symlink in package')}return out.sort()}

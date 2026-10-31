@@ -25,6 +25,7 @@ func (a *App) dispatch(ctx context.Context, action string, p json.RawMessage) (a
 		UserAgent   string `json:"userAgent"`
 		UpdateHours int    `json:"updateHours"`
 		Content     string `json:"content"`
+		Revision    string `json:"revision"`
 		Group       string `json:"group"`
 		Node        string `json:"node"`
 		Timeout     int    `json:"timeout"`
@@ -167,9 +168,11 @@ func (a *App) dispatch(ctx context.Context, action string, p json.RawMessage) (a
 		}), nil
 	case "profiles.save":
 		return a.newJob(action, func() (any, error) {
-			return a.saveProfile(a.operationContext(), Profile{ID: q.ID, Name: q.Name, URL: q.URL, UserAgent: q.UserAgent, UpdateHours: q.UpdateHours}, q.Content)
+			return a.saveProfile(a.operationContext(), Profile{ID: q.ID, Name: q.Name, URL: q.URL, UserAgent: q.UserAgent, UpdateHours: q.UpdateHours}, q.Content, q.Revision)
 		}), nil
 	case "profiles.read":
+		a.op.Lock()
+		defer a.op.Unlock()
 		if !validID(q.ID) {
 			return nil, fmt.Errorf("配置标识无效")
 		}
@@ -177,7 +180,11 @@ func (a *App) dispatch(ctx context.Context, action string, p json.RawMessage) (a
 		if err != nil {
 			return nil, err
 		}
-		return map[string]string{"content": string(b)}, nil
+		profile := findProfile(a.snapshot(), q.ID)
+		if profile == nil {
+			return nil, fmt.Errorf("配置不存在")
+		}
+		return map[string]any{"content": string(b), "profile": profile, "revision": profileRevision(profile, b)}, nil
 	case "profiles.select":
 		return a.newJob(action, func() (any, error) {
 			a.op.Lock()

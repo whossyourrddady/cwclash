@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
 import Icon from './Icon.vue'
+import ProxyEditor from './ProxyEditor.vue'
+import {readCatalog} from './proxy-editor'
 import { subscriptionSummary, orderNodes, currentDelay, historyKey, defaultTestURL } from './presentation'
 import { rpc, actionJob, uploadFile, downloadFile } from './api'
 import type { MeasuredDelay } from './presentation'
@@ -73,6 +75,25 @@ const pauseLogs = ref(false)
 const logLevel = ref('all')
 const editingProfile = ref(false)
 const profileContent = ref('')
+const profileRevision = ref('')
+const visualEditor = ref<{content:string;profile:Profile;revision:string}|null>(null)
+const visualProtected = computed(() => {
+  if(!visualEditor.value)return []
+  const c=readCatalog(visualEditor.value.content),text=JSON.stringify({settings:state.value?.settings,devices:state.value?.devices})
+  return [...c.proxies,...c.groups].map(p=>p.name).filter(n=>text.includes(n))
+})
+async function openVisual(profile?:Profile) {
+  if(!profile)return
+  await run('正在读取节点与代理组',async()=>{const data=await rpc('profiles.read',{id:profile.id});readCatalog(data.content);visualEditor.value={content:data.content,revision:data.revision,profile:data.profile}},'配置已载入可视化编辑器')
+}
+function saveVisual(data:{content:string;asCopy:boolean;name:string}) {
+  void run('正在校验可视化编辑',async()=>{
+    const original=visualEditor.value!
+    const metadata=data.asCopy?{id:'',name:data.name,url:'',userAgent:'',updateHours:0}:{...original.profile,revision:original.revision}
+    await uploadFile('profile',new File([data.content],'profile.yaml'),metadata,p=>progress.value=p)
+    visualEditor.value=null
+  }, data.asCopy?'本地副本已保存，请在配置页选择使用':'节点与代理组已通过检查并保存')
+}
 const profileFile = ref<File | null>(null)
 const assetPath = ref('')
 const formProfile = reactive<Profile>({ id: '', name: '', url: '', userAgent: '', updateHours: 24 })
@@ -223,10 +244,10 @@ function service() { void run(status.value?.running ? '正在停止代理' : '�
 function changeMode(mode: string) { void run('正在切换模式', () => rpc('mode.set', { mode }), `已切换${modeLabel(mode)}模式`) }
 
 function newProfile() {
-  Object.assign(formProfile, { id: '', name: '', url: '', userAgent: '', updateHours: 24 }); profileContent.value = ''; profileFile.value = null; editingProfile.value = true
+  Object.assign(formProfile, { id: '', name: '', url: '', userAgent: '', updateHours: 24 }); profileContent.value = ''; profileRevision.value = ''; profileFile.value = null; editingProfile.value = true
 }
 async function editProfile(profile: Profile) {
-  await run('正在读取配置', async () => { const data = await rpc('profiles.read', { id: profile.id }); Object.assign(formProfile, profile); profileContent.value = data.content; profileFile.value = null; editingProfile.value = true }, '配置已载入编辑器')
+  await run('正在读取配置', async () => { const data = await rpc('profiles.read', { id: profile.id }); Object.assign(formProfile, data.profile || profile); profileRevision.value = data.revision || ''; profileContent.value = data.content; profileFile.value = null; editingProfile.value = true }, '配置已载入编辑器')
 }
 function importProfile(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]; if (!file) return
@@ -238,8 +259,8 @@ function saveProfile() {
   void run('正在校验并保存配置', async () => {
     const text = profileContent.value.trim()
     if (text && new TextEncoder().encode(text).length > 64 * 1024) {
-      await uploadFile('profile', new File([profileContent.value], 'profile.yaml'), { ...formProfile }, p => progress.value = p)
-    } else await actionJob('profiles.save', { ...formProfile, content: profileContent.value })
+      await uploadFile('profile', new File([profileContent.value], 'profile.yaml'), { ...formProfile, revision: profileRevision.value }, p => progress.value = p)
+    } else await actionJob('profiles.save', { ...formProfile, content: profileContent.value, revision: profileRevision.value })
     editingProfile.value = false
   }, '配置已通过检查并保存')
 }
@@ -387,11 +408,11 @@ onUnmounted(() => { clearInterval(timer); clearTimeout(toastTimer); window.remov
       <template v-else-if="page === 'profiles'">
         <div class="toolbar"><p>每份订阅保留自己的规则与代理组，切换配置时统一检查。</p><button class="button button-primary" @click="newProfile"><Icon name="plus" />添加配置</button></div>
         <div v-if="!state?.profiles.length" class="empty-state card"><span class="empty-icon"><Icon name="folder" :size="36" /></span><h3>从一份配置开始</h3><p>支持 Clash / mihomo 订阅链接或 YAML 文件。</p><button class="button button-primary" @click="newProfile">导入配置</button></div>
-        <div class="profile-grid"><article v-for="profile in state?.profiles" :key="profile.id" :class="['card', 'profile-card', { selected: state?.activeProfile === profile.id }]"><div class="section-heading"><span class="file-symbol"><Icon name="folder" :size="25" /></span><span v-if="state?.activeProfile === profile.id" class="tag positive"><Icon name="check" :size="13" />当前配置</span></div><h3>{{ profile.name }}</h3><p class="muted">{{ profile.url ? '在线订阅' : '本地配置' }} · {{ profile.updateHours ? `每 ${profile.updateHours} 小时更新` : '手动更新' }}</p><p class="profile-date"><Icon name="clock" :size="14" />最近保存 {{ date(profile.updatedAt) }}</p><p v-if="profile.lastAttempt" class="field-help">最近尝试 {{ date(profile.lastAttempt) }}</p><p v-if="profile.updateError" class="negative">更新失败：{{ profile.updateError }}</p><p v-if="profile.url && profile.updateHours" class="field-help">{{ profile.updateError ? '下次重试' : '下次更新' }}：{{ nextUpdates[profile.id] ? date(nextUpdates[profile.id]) : '等待调度' }}</p><div v-if="profile.url" class="subscription-quota"><template v-for="quota in [subscriptionSummary(profile.subscriptionInfo)]" :key="profile.id"><p>已用 {{ quota.used === null ? '未提供' : bytes(quota.used) }} · 剩余 {{ quota.remaining === null ? '未提供' : bytes(quota.remaining) }}</p><progress v-if="quota.percent !== null" :value="quota.percent" max="100" aria-label="订阅流量使用比例" /><p :class="{ negative: quota.expired }">{{ quota.expired ? '已到期' : '到期时间' }}：{{ quota.expiry === null ? '未提供' : date(new Date(quota.expiry).toISOString()) }}</p></template></div><div class="profile-actions"><button class="button button-secondary" :disabled="state?.activeProfile === profile.id || !!busy" @click="chooseProfile(profile)">{{ state?.activeProfile === profile.id ? '已选择' : '使用配置' }}</button><button v-if="profile.url" class="icon-button" title="更新订阅" :disabled="!!busy" @click="updateProfile(profile)"><Icon name="refresh" :size="17" /></button><button class="icon-button" title="编辑配置" @click="editProfile(profile)"><Icon name="edit" :size="17" /></button><button class="icon-button" title="导出配置" @click="run('正在导出配置', () => downloadFile('profile', profile.id))"><Icon name="download" :size="17" /></button><button class="icon-button destructive" title="删除配置" @click="deleteProfile(profile)"><Icon name="trash" :size="17" /></button></div></article></div>
+        <div class="profile-grid"><article v-for="profile in state?.profiles" :key="profile.id" :class="['card', 'profile-card', { selected: state?.activeProfile === profile.id }]"><div class="section-heading"><span class="file-symbol"><Icon name="folder" :size="25" /></span><span v-if="state?.activeProfile === profile.id" class="tag positive"><Icon name="check" :size="13" />当前配置</span></div><h3>{{ profile.name }}</h3><p class="muted">{{ profile.url ? '在线订阅' : '本地配置' }} · {{ profile.updateHours ? `每 ${profile.updateHours} 小时更新` : '手动更新' }}</p><p class="profile-date"><Icon name="clock" :size="14" />最近保存 {{ date(profile.updatedAt) }}</p><p v-if="profile.lastAttempt" class="field-help">最近尝试 {{ date(profile.lastAttempt) }}</p><p v-if="profile.updateError" class="negative">更新失败：{{ profile.updateError }}</p><p v-if="profile.url && profile.updateHours" class="field-help">{{ profile.updateError ? '下次重试' : '下次更新' }}：{{ nextUpdates[profile.id] ? date(nextUpdates[profile.id]) : '等待调度' }}</p><div v-if="profile.url" class="subscription-quota"><template v-for="quota in [subscriptionSummary(profile.subscriptionInfo)]" :key="profile.id"><p>已用 {{ quota.used === null ? '未提供' : bytes(quota.used) }} · 剩余 {{ quota.remaining === null ? '未提供' : bytes(quota.remaining) }}</p><progress v-if="quota.percent !== null" :value="quota.percent" max="100" aria-label="订阅流量使用比例" /><p :class="{ negative: quota.expired }">{{ quota.expired ? '已到期' : '到期时间' }}：{{ quota.expiry === null ? '未提供' : date(new Date(quota.expiry).toISOString()) }}</p></template></div><div class="profile-actions"><button class="button button-secondary" :disabled="state?.activeProfile === profile.id || !!busy" @click="chooseProfile(profile)">{{ state?.activeProfile === profile.id ? '已选择' : '使用配置' }}</button><button v-if="profile.url" class="icon-button" title="更新订阅" :disabled="!!busy" @click="updateProfile(profile)"><Icon name="refresh" :size="17" /></button><button class="button button-secondary button-small" :disabled="!!busy" @click="openVisual(profile)">编辑节点/组</button><button class="icon-button" title="编辑配置" @click="editProfile(profile)"><Icon name="edit" :size="17" /></button><button class="icon-button" title="导出配置" @click="run('正在导出配置', () => downloadFile('profile', profile.id))"><Icon name="download" :size="17" /></button><button class="icon-button destructive" title="删除配置" @click="deleteProfile(profile)"><Icon name="trash" :size="17" /></button></div></article></div>
       </template>
 
       <template v-else-if="page === 'proxies'">
-        <details class="card"><summary>测速与切换设置</summary><div class="form-grid"><label>测速地址<input v-model="nodePrefs.url" :disabled="!!busy" type="url" /></label><label>超时（毫秒）<input v-model.number="nodePrefs.timeout" :disabled="!!busy" type="number" min="1000" max="15000" /></label><label>测速并发<input v-model.number="nodePrefs.concurrency" :disabled="!!busy" type="number" min="1" max="8" /></label><label class="check-setting"><input v-model="nodePrefs.closeConnections" :disabled="!!busy" type="checkbox" /><span>切换线路后关闭全部旧连接<small>现有下载、视频等连接会重新建立，默认关闭。</small></span></label></div><button class="button button-secondary button-small" :disabled="!!busy" @click="saveNodePrefs">保存操作偏好</button><p class="field-help">保存在当前浏览器。测量延迟，不是下载带宽；更换测试地址后重新测速。内核历史没有测试地址标记时，不用于自定义地址结果。</p></details>
+        <div class="button-row"><button class="button button-secondary" :disabled="!!busy || !state?.activeProfile" @click="openVisual(state?.profiles.find(p=>p.id===state?.activeProfile))">编辑当前配置节点/组</button></div><details class="card"><summary>测速与切换设置</summary><div class="form-grid"><label>测速地址<input v-model="nodePrefs.url" :disabled="!!busy" type="url" /></label><label>超时（毫秒）<input v-model.number="nodePrefs.timeout" :disabled="!!busy" type="number" min="1000" max="15000" /></label><label>测速并发<input v-model.number="nodePrefs.concurrency" :disabled="!!busy" type="number" min="1" max="8" /></label><label class="check-setting"><input v-model="nodePrefs.closeConnections" :disabled="!!busy" type="checkbox" /><span>切换线路后关闭全部旧连接<small>现有下载、视频等连接会重新建立，默认关闭。</small></span></label></div><button class="button button-secondary button-small" :disabled="!!busy" @click="saveNodePrefs">保存操作偏好</button><p class="field-help">保存在当前浏览器。测量延迟，不是下载带宽；更换测试地址后重新测速。内核历史没有测试地址标记时，不用于自定义地址结果。</p></details>
         <div v-if="batchActive" class="banner"><span>{{ batchCancelled ? '正在结束已发出的测速请求…' : '批量测速进行中' }}</span><button class="button button-secondary button-small" :disabled="batchCancelled" @click="batchCancelled=true">取消剩余测速</button><small>已发出的请求等待完成或超时，不再发送后续节点。</small></div>
 
         <div class="toolbar"><div class="search-input"><Icon name="search" :size="17" /><input v-model="search" placeholder="搜索代理组或节点" aria-label="搜索代理" /></div><select v-model="nodeSort" aria-label="节点排序"><option value="default">订阅顺序</option><option value="delay">延迟从低到高</option><option value="name">按名称排序</option></select><select v-model="nodeFilter" aria-label="节点筛选"><option value="all">全部节点</option><option value="favorites">仅收藏</option><option value="available">隐藏测速超时</option></select><span class="muted">收藏保存在当前浏览器</span></div>
@@ -447,6 +468,7 @@ onUnmounted(() => { clearInterval(timer); clearTimeout(toastTimer); window.remov
 
     <Transition name="toast"><div v-if="notice" :class="['toast-message',notice.kind]" role="alert"><Icon :name="notice.kind === 'error' ? 'info' : 'check'" /><span>{{ notice.text }}</span><button class="icon-button" aria-label="关闭提示" @click="notice=null"><Icon name="close" :size="16" /></button></div></Transition>
 
+    <ProxyEditor v-if="visualEditor" :content="visualEditor.content" :profile="visualEditor.profile" :busy="!!busy" :protected-names="visualProtected" :has-override="!!state?.settings.overrideYaml" @close="visualEditor=null" @save="saveVisual" />
     <div v-if="editingProfile" class="modal-backdrop" @click.self="!busy && (editingProfile=false)"><section class="modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title"><div class="section-heading"><div><h2 id="profile-title">{{ formProfile.id ? '编辑配置' : '添加配置' }}</h2><p>导入订阅链接、YAML 文件或直接编辑配置。</p></div><button class="icon-button" aria-label="关闭编辑器" :disabled="!!busy" @click="editingProfile=false"><Icon name="close" /></button></div><div class="form-grid"><label>配置名称<input v-model="formProfile.name" placeholder="例如：我的订阅" maxlength="100" /></label><label>自动更新<select v-model.number="formProfile.updateHours"><option :value="0">手动更新</option><option :value="6">每 6 小时</option><option :value="12">每 12 小时</option><option :value="24">每天</option><option :value="168">每周</option></select></label></div><label>订阅地址<input v-model="formProfile.url" type="url" placeholder="https://…" autocomplete="off" spellcheck="false" /></label><label>订阅 User-Agent<input v-model="formProfile.userAgent" placeholder="默认 clash.meta / cwclash" /></label><div class="editor-heading"><label>配置内容 <small>{{ profileContent ? `${bytes(new TextEncoder().encode(profileContent).length)}` : '为空时从订阅地址下载' }}</small></label><label class="button button-secondary button-small upload-label"><Icon name="upload" :size="14" />选择 YAML 文件<input type="file" accept=".yaml,.yml,.txt" @change="importProfile" /></label></div><textarea v-model="profileContent" class="code-editor" rows="12" placeholder="粘贴完整 Clash / mihomo YAML 配置，也可以留空以下载订阅。" spellcheck="false" /><div class="modal-actions"><button class="button button-secondary" :disabled="!!busy" @click="editingProfile=false">取消</button><button class="button button-primary" :disabled="!!busy || !formProfile.name || (!profileContent.trim() && !formProfile.url)" @click="saveProfile"><span v-if="busy" class="spinner" />{{ busy ? '正在校验…' : '校验并保存' }}</button></div></section></div>
 
     <div v-if="confirmation" class="modal-backdrop" @click.self="confirmation=null"><section class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title"><span class="confirm-icon"><Icon name="info" :size="30" /></span><h2 id="confirm-title">{{ confirmation.title }}</h2><p>{{ confirmation.text }}</p><div class="modal-actions"><button class="button button-secondary" @click="confirmation=null">取消</button><button class="button button-primary" @click="confirmation.confirm()">确认</button></div></section></div>

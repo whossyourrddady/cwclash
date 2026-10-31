@@ -152,15 +152,18 @@ func (a *App) handleUpload(ctx context.Context, action string, p json.RawMessage
 				return a.dispatch(a.operationContext(), meta.Action, b)
 			}
 			if copy.Kind == "profile" {
-				var profile Profile
-				if err := json.Unmarshal(copy.Metadata, &profile); err != nil {
+				var meta struct {
+					Profile
+					Revision string `json:"revision"`
+				}
+				if err := json.Unmarshal(copy.Metadata, &meta); err != nil {
 					return nil, err
 				}
 				b, err := os.ReadFile(copy.Path)
 				if err != nil {
 					return nil, err
 				}
-				return a.saveProfile(a.operationContext(), profile, string(b))
+				return a.saveProfile(a.operationContext(), meta.Profile, string(b), meta.Revision)
 			}
 			a.op.Lock()
 			defer a.op.Unlock()
