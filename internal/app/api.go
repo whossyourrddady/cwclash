@@ -261,6 +261,9 @@ func (a *App) dispatch(ctx context.Context, action string, p json.RawMessage) (a
 		}
 		return a.controller(ctx, "GET", "/dns/query", map[string]string{"name": name, "type": typ}, nil)
 	case "groups":
+		if !a.isRunning() {
+			return a.previewGroups()
+		}
 		return a.controller(ctx, "GET", "/proxies", nil, nil)
 	case "groups.select":
 		if q.Group == "" || q.Node == "" {

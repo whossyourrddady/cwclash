@@ -11,7 +11,7 @@ type Page = 'overview' | 'profiles' | 'proxies' | 'rules' | 'connections' | 'dns
 const pages: { id: Page; label: string; icon: string; subtitle: string }[] = [
   { id: 'overview', label: '概览', icon: 'home', subtitle: '网络状态，一目了然' },
   { id: 'profiles', label: '配置', icon: 'folder', subtitle: '管理你的订阅与配置' },
-  { id: 'proxies', label: '代理', icon: 'globe', subtitle: '选择线路，保持畅通' },
+  { id: 'proxies', label: '节点', icon: 'globe', subtitle: '节点、代理组与延迟测试' },
   { id: 'rules', label: '规则', icon: 'rules', subtitle: '让每一次连接各行其道' },
   { id: 'connections', label: '连接', icon: 'network', subtitle: '查看正在发生的网络连接' },
   { id: 'dns', label: 'DNS', icon: 'search', subtitle: '查询记录与解析诊断' },
@@ -33,6 +33,10 @@ const notice = ref<{ text: string; kind: string } | null>(null)
 const search = ref('')
 const progress = ref(0)
 const proxyData = ref<Record<string, any>>({})
+const proxySource = ref('')
+const previewProviders = ref<string[]>([])
+let groupsReadAt = 0
+const canUseNodes = computed(() => connected.value && !!status.value?.running && proxySource.value === 'core')
 const connections = ref<any[]>([])
 const rules = ref<any[]>([])
 const providers = ref<any>({})
@@ -92,6 +96,13 @@ const capturing = computed(() => connected.value && !!status.value?.running && s
 const serviceLabel = computed(() => !connected.value ? '状态待确认' : capturing.value ? '局域网代理已启用' : status.value?.running ? '直连模式 · 内核运行中' : '代理已停止 · 当前使用直连')
 const heroDescription = computed(() => !connected.value ? '管理服务连接中断，暂时无法确认路由器的代理状态。请重新连接后查看。' : capturing.value ? `正在使用「${profileName.value}」，为局域网设备提供${modeLabel(status.value?.mode)}分流。` : status.value?.running ? '局域网设备直接联网，mihomo 保留供手动代理使用。' : '导入 Clash 配置，选择适合的线路，即可开启路由器代理。')
 const groups = computed(() => Object.entries(proxyData.value).filter(([, p]) => Array.isArray(p.all)).map(([name, p]) => ({ ...p, name })))
+const displayGroups = computed(() => {
+  const result = groups.value
+  if (proxySource.value !== 'config') return result
+  const members = new Set(result.flatMap(g => g.all))
+  const nodes = Object.keys(proxyData.value).filter(n => !Array.isArray(proxyData.value[n].all) && !members.has(n))
+  return nodes.length ? [...result, { name: '配置中的其他节点', type: '节点列表', all: nodes, catalog: true }] : result
+})
 const groupNames = computed(() => groups.value.map(g => g.name))
 const expandedGroups = ref<Record<string, boolean>>({})
 const filteredConnections = computed(() => connections.value.filter(c => JSON.stringify(c.metadata || {}).toLowerCase().includes(search.value.toLowerCase())))
@@ -124,6 +135,7 @@ async function run(label: string, fn: () => Promise<any>, success = '已完成')
 }
 
 async function loadState(reset = '') {
+  groupsReadAt = 0
   const data = await rpc<{ state: State }>('state.get'); state.value = data.state
   if (!settingsDirty.value || reset === 'settings' || reset === 'all') {
   settings.value = structuredClone(data.state.settings)
@@ -145,13 +157,20 @@ async function refreshPage() {
   if (page.value === 'dns') {
     const data = await rpc<any[]>('dns.history', { since: dnsHistory.value.at(-1)?.id || 0 }); dnsHistory.value = [...dnsHistory.value, ...data].slice(-1000)
   }
+  if (page.value === 'overview' || page.value === 'proxies') await refreshGroups()
   if (!status.value.running) { connections.value = []; return }
-  if (page.value === 'overview' || page.value === 'proxies') {
-    const data = await rpc('groups'); proxyData.value = data.proxies || {}
-  }
   if (page.value === 'connections' || page.value === 'devices') { const data = await rpc('connections'); connections.value = data.connections || [] }
   if (page.value === 'rules' && ruleTab.value === 'active') { const data = await rpc('rules'); rules.value = data.rules || [] }
   if (page.value === 'rules' && ruleTab.value === 'providers') providers.value = await rpc('providers')
+}
+
+async function refreshGroups() {
+  const expected = status.value?.running ? 'core' : 'config'
+  if (expected === 'config' && proxySource.value === expected && Date.now() - groupsReadAt < 15000) return
+  if (proxySource.value !== expected) { proxyData.value = {}; proxySource.value = ''; previewProviders.value = [] }
+  const data = await rpc('groups')
+  proxyData.value = data.proxies || {}; proxySource.value = data.source || 'core'
+  previewProviders.value = data.providers || []; groupsReadAt = Date.now()
 }
 
 async function poll() {
@@ -200,7 +219,7 @@ function updateProfile(profile: Profile) { void run('正在更新订阅', () => 
 function deleteProfile(profile: Profile) { if (state.value?.activeProfile === profile.id && status.value?.running) { toast('请先停止代理，再删除当前配置', 'error'); return }; ask('删除配置', `删除“${profile.name}”？`, () => void run('正在删除配置', () => rpc('profiles.delete', { id: profile.id }), '配置已删除')) }
 
 function selectProxy(group: string, node: string) { void run('正在选择线路', () => rpc('groups.select', { group, node }), '线路已切换') }
-async function testDelay(name: string) { await run('正在测试延迟', async () => { await rpc('groups.delay', { group: name }); const data = await rpc('groups'); proxyData.value = data.proxies || {} }, '延迟测试完成') }
+async function testDelay(name: string) { await run('正在测试延迟', async () => { await rpc('groups.delay', { group: name }); await refreshGroups() }, '延迟测试完成') }
 function testGroup(group: any) {
   void run('正在批量测速', async () => {
     const names = [...new Set<string>(group.all)]; let index = 0, completed = 0
@@ -293,8 +312,9 @@ onUnmounted(() => { clearInterval(timer); clearTimeout(toastTimer); window.remov
 
       <template v-else-if="page === 'proxies'">
         <div class="toolbar"><div class="search-input"><Icon name="search" :size="17" /><input v-model="search" placeholder="搜索代理组或节点" aria-label="搜索代理" /></div><select v-model="nodeSort" aria-label="节点排序"><option value="default">订阅顺序</option><option value="delay">延迟从低到高</option><option value="name">按名称排序</option></select><select v-model="nodeFilter" aria-label="节点筛选"><option value="all">全部节点</option><option value="favorites">仅收藏</option><option value="available">隐藏测速超时</option></select><span class="muted">收藏保存在当前浏览器</span></div>
-        <div v-if="!status?.running" class="empty-state card"><Icon name="globe" :size="36" /><h3>启动代理后查看线路</h3><p>代理组与节点信息直接读取自 mihomo 内核。</p></div>
-        <section v-for="group in groups" v-show="!search || group.name.toLowerCase().includes(search.toLowerCase()) || group.all.some((n:string) => n.toLowerCase().includes(search.toLowerCase()))" :key="group.name" class="card proxy-group"><div class="section-heading"><button class="group-title" @click="expandedGroups[group.name] = expandedGroups[group.name] === false"><Icon name="globe" /><span><h3>{{ group.name }}</h3><small>{{ group.type }} · {{ group.now || '自动选择' }}</small></span></button><button class="button button-secondary button-small" :disabled="!!busy" @click="testGroup(group)"><Icon name="bolt" :size="15" />测速</button></div><p v-if="!visibleNodes(group).length" class="field-help">没有匹配的节点，请调整搜索或筛选。</p><div v-if="expandedGroups[group.name] !== false" class="node-grid"><div v-for="node in visibleNodes(group)" :key="node" :class="['node-card', { selected: group.now === node }]"><button class="favorite-button" :aria-label="(isFavorite(group.name,node) ? '取消收藏 ' : '收藏 ') + node" :aria-pressed="isFavorite(group.name,node)" @click="toggleFavorite(group.name,node)">{{ isFavorite(group.name,node) ? '★' : '☆' }}</button><button class="node-select" :disabled="!!busy || group.type !== 'Selector'" @click="selectProxy(group.name,node)"><span class="node-radio"><Icon v-if="group.now === node" name="check" :size="12" /></span><span class="node-copy"><strong>{{ node }}</strong><small>{{ proxyData[node]?.type || '代理组' }}{{ proxyData[node]?.udp ? ' · UDP' : '' }}</small></span></button><button :class="['node-delay', { good: delay(node)! > 0 && delay(node)! < 300, poor: delay(node) === 0 || delay(node)! >= 600 }]" :disabled="!!busy" title="测试延迟" @click="testDelay(node)">{{ delay(node) === null ? '测速' : delay(node) === 0 ? '超时' : `${delay(node)} ms` }}</button></div></div></section>
+        <section class="card"><div class="section-heading"><div><h3>{{ canUseNodes ? '内核实时节点' : '配置预览' }}</h3><p>{{ canUseNodes ? '节点选择、代理组与延迟测试；测速结果来自 mihomo。' : '服务停止时可浏览已保存配置（含 YAML 覆写）。测速和切换线路需要内核运行。' }}</p></div><button class="button button-secondary button-small" :disabled="!!busy" @click="groupsReadAt = 0; run('正在读取节点', refreshGroups)">刷新节点</button></div><p v-if="proxySource === 'config'" class="field-help">这里只展示配置中明确列出的成员；集合加载、筛选和自动选择的最终结果以内核运行为准，不代表当前生效线路。</p><p v-if="previewProviders.length" class="field-help">代理集合（节点需内核加载后查看）：{{ previewProviders.join('、') }}</p><div class="button-row"><button class="button button-secondary button-small" @click="ruleTab = 'custom'; navigate('rules')">域名 / IP 分流</button><button class="button button-secondary button-small" @click="navigate('devices')">按设备分流</button></div></section>
+        <div v-if="!displayGroups.length" class="empty-state card"><h3>{{ state?.activeProfile ? '配置中暂无可预览的节点' : '尚未选择配置' }}</h3><p>可前往配置页导入或选择配置；集合中的节点需内核加载。</p><button class="button button-secondary" @click="navigate('profiles')">管理配置</button></div>
+        <section v-for="group in displayGroups" v-show="!search || group.name.toLowerCase().includes(search.toLowerCase()) || group.all.some((n:string) => n.toLowerCase().includes(search.toLowerCase()))" :key="`${group.catalog ? 'catalog' : 'group'}:${group.name}`" class="card proxy-group"><div class="section-heading"><button class="group-title" @click="expandedGroups[group.name] = expandedGroups[group.name] === false"><Icon name="globe" /><span><h3>{{ group.name }}</h3><small>{{ group.type }} · {{ canUseNodes ? (group.now || '自动选择') : '配置预览' }}</small></span></button><button class="button button-secondary button-small" :disabled="!!busy || !canUseNodes" title="内核运行时可测速" @click="testGroup(group)"><Icon name="bolt" :size="15" />测速</button></div><p v-if="!visibleNodes(group).length" class="field-help">没有匹配的节点，请调整搜索或筛选。</p><div v-if="expandedGroups[group.name] !== false" class="node-grid"><div v-for="node in visibleNodes(group)" :key="node" :class="['node-card', { selected: canUseNodes && group.now === node }]"><button class="favorite-button" :aria-label="(isFavorite(group.name,node) ? '取消收藏 ' : '收藏 ') + node" :aria-pressed="isFavorite(group.name,node)" @click="toggleFavorite(group.name,node)">{{ isFavorite(group.name,node) ? '★' : '☆' }}</button><button class="node-select" :disabled="!!busy || !canUseNodes || group.type !== 'Selector'" @click="selectProxy(group.name,node)"><span class="node-radio"><Icon v-if="canUseNodes && group.now === node" name="check" :size="12" /></span><span class="node-copy"><strong>{{ node }}</strong><small>{{ proxyData[node]?.type || ({ DIRECT: '直连', REJECT: '拒绝', 'REJECT-DROP': '丢弃' } as Record<string, string>)[node] || '代理组' }}{{ proxyData[node]?.udp ? ' · UDP' : '' }}</small></span></button><button :class="['node-delay', { good: delay(node)! > 0 && delay(node)! < 300, poor: delay(node) === 0 || delay(node)! >= 600 }]" :disabled="!!busy || !canUseNodes" :title="canUseNodes ? '测试延迟' : '内核运行后可测速'" @click="testDelay(node)">{{ !canUseNodes ? '未测速' : delay(node) === null ? '测速' : delay(node) === 0 ? '超时' : `${delay(node)} ms` }}</button></div></div></section>
       </template>
 
       <template v-else-if="page === 'rules'">

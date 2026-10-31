@@ -1,14 +1,14 @@
 # FlClash 功能对照（2026-10-31）
 
-**结论：长城 Clash 0.3.1 尚未与 FlClash 完全对齐。** 常用代理管理已有实现；JavaScript 覆写、WebDAV、TUN、可视化节点/代理组编辑等仍有差距。桌面和 Android 专属能力不能直接搬到路由器。
+**结论：长城 Clash 0.3.5 尚未与 FlClash 完全对齐。** 常用代理管理已有实现；JavaScript 覆写、WebDAV、TUN、可视化节点/代理组编辑等仍有差距。桌面和 Android 专属能力不能直接搬到路由器。
 
 对照依据为 [FlClash 当前中文 README](https://github.com/chen08209/FlClash/blob/main/README_zh_CN.md) 的公开功能项，以及本仓库实际页面、API 和配置处理代码。这里的“已实现”表示存在对应代码和操作入口，不等于所有固件/订阅/协议组合都经过验收；不是两个客户端的全量行为一致性测试。
 
-| 功能 | 长城 Clash 0.3.1 | 实现位置与边界 |
+| 功能 | 长城 Clash 0.3.5 | 实现位置与边界 |
 | --- | --- | --- |
 | mihomo 内核 | 已实现 | 官方 Linux ARM64 内核，支持检查更新、离线导入和上一版回退；[upgrade.go](../internal/app/upgrade.go)、[core_storage.go](../internal/app/core_storage.go)。 |
 | 规则、全局、直连模式 | 已实现 | 概览切换，真实更新内核与本插件接管规则；[core.go](../internal/app/core.go)、[network.go](../internal/app/network.go)。 |
-| 代理组选择与延迟测试 | 已实现 | 策略组、节点选择、单个/批量测速、手动选择按配置保留；支持按延迟/名称排序、隐藏测速超时及当前浏览器按配置/组收藏；[App.vue](../web/src/App.vue)、[api.go](../internal/app/api.go)。 |
+| 代理组选择与延迟测试 | 已实现 | 节点页支持停机配置预览（仅静态成员，含 YAML 覆写）；动态集合与最终成员由内核运行时加载。运行时支持策略组、节点选择、单个/批量测速、手动选择按配置保留；支持按延迟/名称排序、隐藏测速超时及当前浏览器按配置/组收藏；[App.vue](../web/src/App.vue)、[api.go](../internal/app/api.go)。 |
 | 订阅链接、文件导入、编辑 | 已实现 | 多配置切换、YAML 编辑、自动更新、User-Agent、导出；订阅额度与到期时间可读展示；上游未提供的字段显示未提供。 |
 | 自定义规则与 YAML 覆写 | 已实现 | 域名/CIDR 分流、自定义 mihomo 规则、YAML 深度合并；路由器控制端口、接管方式等由插件最后统一设置；[config.go](../internal/app/config.go)。 |
 | JavaScript 覆写脚本 | 未实现 | YAML 覆写不能执行 FlClash 的 JavaScript 脚本，也不能宣称二者兼容。 |

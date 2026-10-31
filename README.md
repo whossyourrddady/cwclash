@@ -2,7 +2,9 @@
 
 面向 GT-AX6000、带 ASUS GO / Koolshare 软件中心的 ASUSWRT-Merlin 独立插件。以 mihomo 为代理内核，提供中文配置、订阅、代理组、规则、连接、DNS、设备分流、内核更新回退和备份管理。
 
-## 当前交付：0.3.4 USB 完整版
+## 当前交付：0.3.5 USB 完整版
+
+0.3.5 将「代理」页更名为「节点」。停机时读取当前已保存配置及 YAML 覆写，显示静态节点和代理组，不启动内核、不下载订阅。动态集合、筛选及自动选择结果仍需内核加载；预览不显示生效线路或旧延迟。启动后使用 mihomo 实时数据并开放测速、选择线路。节点页提供「域名 / IP 分流」和「按设备分流」入口，分别进入规则和设备页。
 
 0.3.4 修复 TPROXY 预检仅查看用户态帮助的缺口：先在未挂接流量的临时 mangle 链实际创建目标规则，失败后尝试固件 modprobe 的 xt_TPROXY / xt_TPROXY.ko 两种名称并重测。IPv4 失败时不启动接管；IPv6 自动模式不支持时保留防绕过，强制模式则报错。只清理本次成功创建的临时链，状态轮询不创建检测链。不下载、强制加载或卸载第三方模块。参考 [fancyss 模块加载](https://github.com/hq450/fancyss/blob/3.0/fancyss/ss/ssconfig.sh#L5007)。环境诊断新增内存总量/可用量、模块和内核目标列表；没有实机数据时不推断 OOM。
 
@@ -12,9 +14,9 @@ Go 全包测试、vet 和模块加载/临时链清理模拟通过；仍待 GT-AX
 
 0.3.2 修复 0.3.1 版本文件 CRLF 导致安装器误报“管理程序无法在当前固件运行”。构建统一写入 LF，审计严格检查原始字节；安装日志分别报告启动失败和版本不匹配。0.3.1 此处失败发生在修改现有安装之前，直接使用新版完整包重试即可。
 
-[下载 USB 安装包](https://github.com/whossyourrddady/cwclash/releases/download/v0.3.4/cwclash_hnd_v8_usb_0.3.4.tar.gz) · [版本说明、源码与校验文件](https://github.com/whossyourrddady/cwclash/releases/tag/v0.3.4)。这是私人仓库，需要使用有权限的 GitHub 账号访问。
+[下载 USB 安装包](https://github.com/whossyourrddady/cwclash/releases/download/v0.3.5/cwclash_hnd_v8_usb_0.3.5.tar.gz) · [版本说明、源码与校验文件](https://github.com/whossyourrddady/cwclash/releases/tag/v0.3.5)。这是私人仓库，需要使用有权限的 GitHub 账号访问。
 
-使用官方 USB2JFFS 将健康的 EXT4 U 盘挂载到 `/jffs`，再通过软件中心离线安装 **`cwclash_hnd_v8_usb_0.3.4.tar.gz`**。一份包包含管理端、界面和官方 [mihomo v1.19.33](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.33) Linux ARM64 内核，无需先装引导包。
+使用官方 USB2JFFS 将健康的 EXT4 U 盘挂载到 `/jffs`，再通过软件中心离线安装 **`cwclash_hnd_v8_usb_0.3.5.tar.gz`**。一份包包含管理端、界面和官方 [mihomo v1.19.33](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.33) Linux ARM64 内核，无需先装引导包。
 
 - 包大小约 25.4 MB，持久文件约 58.5 MiB；安装器额外保留至少 128 MiB，供更新和回退使用。规则、GeoIP、配置和缓存还会继续占用 U 盘空间。
 - 安装前核对 `/jffs`、软件中心和插件目标目录确实位于同一块可写 USB EXT4 分区；条件不符时拒绝安装。
@@ -26,7 +28,7 @@ Go 全包测试、vet 和模块加载/临时链清理模拟通过；仍待 GT-AX
 
 0.2.1 支持 USB 硬件祖先直接出现在块设备路径中的布局，也支持 `/sys/block` 下通过整盘 `device` 链接访问硬件的旧布局；缺少 `/sys/dev/block` 索引时，改查 class/block 或 block 入口并核验相同的设备编号。相关内核接口见 [sysfs-dev](https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-dev)。
 
-## 0.3.4 日常操作优化
+## 0.3.5 日常操作优化
 
 概览分开展示管理服务、内核、DNS 模式与存储检查入口。DNS 模式不是连通性检测结果；存储显示最近一次手动检查结果。
 
@@ -34,9 +36,9 @@ Go 全包测试、vet 和模块加载/临时链清理模拟通过；仍待 GT-AX
 
 ## 使用
 
-USB2JFFS 挂载成功后安装 USB 完整包。软件中心打开“长城 Clash”，导入 Clash/mihomo YAML 文件或订阅，选择代理组后启用。启用前关闭其他透明代理插件。不自动转换 fancyss 节点数据库或 Xray JSON。
+USB2JFFS 挂载成功后安装 USB 完整包。软件中心打开“长城 Clash”，导入 Clash/mihomo YAML 文件或订阅，启用后选择代理组线路。启用前关闭其他透明代理插件。不自动转换 fancyss 节点数据库或 Xray JSON。
 
-0.3.4 将页面直接放入固件的顶部、左侧菜单和内容框中，使用横向功能标签和紧凑表单，跟随 ASUSWRT / ROG / TUF / TS 皮肤。页面和数据接口均使用路由器同源地址，不再使用独立应用侧栏或另开窗口。更新后用 Ctrl+F5 刷新旧页面。
+0.3.5 将页面直接放入固件的顶部、左侧菜单和内容框中，使用横向功能标签和紧凑表单，跟随 ASUSWRT / ROG / TUF / TS 皮肤。页面和数据接口均使用路由器同源地址，不再使用独立应用侧栏或另开窗口。更新后用 Ctrl+F5 刷新旧页面。
 
 **尚未与 FlClash 完全对齐。** 订阅、代理组、测速、规则、连接、DNS、日志和本地备份已有实现；JavaScript 覆写、WebDAV、TUN 和独立的可视化节点/代理组编辑器尚未实现。平台差异、已实现边界及待办见 [FlClash 功能对照](docs/FLCLASH-PARITY.md)。
 
