@@ -116,6 +116,9 @@ func (a *App) networkSummary(s State) map[string]any {
 			mode = "IPv6 透明代理"
 		}
 	}
+	if a.isPreview() {
+		mode = "测速模式 · 未接管 IPv6"
+	}
 	return map[string]any{"lanInterface": s.Settings.LANInterface, "ipv6": mode, "dnsMode": s.Settings.DNSMode, "failOpen": true, "mixedPort": s.Settings.MixedPort}
 }
 
@@ -188,6 +191,9 @@ func (a *App) preflightNetwork(s State) error {
 }
 
 func (a *App) applyNetwork(s State) error {
+	if a.isPreview() {
+		return nil
+	}
 	if a.dev {
 		return nil
 	}

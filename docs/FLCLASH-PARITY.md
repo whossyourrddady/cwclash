@@ -1,12 +1,12 @@
 # FlClash 功能对照（2026-10-31）
 
-**结论：长城 Clash 0.3.8 尚未与 FlClash 完全对齐。** 常用代理管理已有实现；JavaScript 覆写、WebDAV、TUN 等仍有差距。0.3.8 已增加可视化节点/组编辑，具体范围见下文。桌面和 Android 专属能力不能直接搬到路由器。
+**结论：长城 Clash 0.3.9 尚未与 FlClash 完全对齐。** 常用代理管理已有实现；JavaScript 覆写、WebDAV、TUN 等仍有差距。0.3.8 已增加可视化节点/组编辑，具体范围见下文。桌面和 Android 专属能力不能直接搬到路由器。
 
 本轮实际读取 FlClash 源码，固定于 **`7fd417fb9a9a277c6a9339a8ac87f907df7c25f7`**（2026-10-24），不是只看 README。对照源包括 core/delay.go、core/profile_base.go、core/provider.go、core/geo.go、lib/models/profile.dart、lib/models/clash_config.dart、lib/manager/core_manager.dart，以及 providers/actions 下的 profiles、proxies、backup、scripts、geo_resource。
 
 “已实现”表示有相应代码和入口，不等于不同固件、订阅、协议全部验收；本次按公开行为独立实现，没有把 FlClash 客户端或其修改版内核打包进插件。
 
-| 功能 | 长城 Clash 0.3.8 | 实现位置与边界 |
+| 功能 | 长城 Clash 0.3.9 | 实现位置与边界 |
 | --- | --- | --- |
 | mihomo 内核 | 已实现 | 官方 Linux ARM64 内核，支持检查更新、离线导入和上一版回退；[upgrade.go](../internal/app/upgrade.go)、[core_storage.go](../internal/app/core_storage.go)。 |
 | 规则、全局、直连模式 | 已实现 | 概览切换，真实更新内核与本插件接管规则；[core.go](../internal/app/core.go)、[network.go](../internal/app/network.go)。 |
@@ -49,7 +49,7 @@ GEO/集合调度字段遵循 [mihomo 通用配置](https://wiki.metacubex.one/co
 - **单节点分享链接与加密配置**：0.3.8 已提供可视化编辑；仍不能直接导入任意 ss://、vmess:// 等分享链接，未实现 FlClash 的 age 加密配置流程。
 - **按配置单独覆写、JavaScript**：[scripts.dart](https://github.com/chen08209/FlClash/blob/7fd417fb9a9a277c6a9339a8ac87f907df7c25f7/lib/providers/actions/scripts.dart) 将脚本关联配置。本插件仅有全局 YAML 覆写，无 JS 运行环境，不能声称兼容 FlClash 脚本。
 - **WebDAV 与备份兼容**：[backup.dart](https://github.com/chen08209/FlClash/blob/7fd417fb9a9a277c6a9339a8ac87f907df7c25f7/lib/providers/actions/backup.dart) 包含数据库快照及远端备份；本插件是自己的本地 ZIP 格式，未实现 WebDAV。
-- **GEO 逐资源管理、出口 IP/质量探测、请求事件分析**：没有完整对应入口或事件模型。当前集合结果、连接表、DNS 历史不能替代这些能力。
+- **GEO 逐资源管理、完整 IP 质量分析、请求事件分析**：0.3.9 有网站/地区线索和 Cloudflare 域名对应的出口 IP 检查，但没有完整 IP 信誉/质量模型或 GEO 逐资源事件。当前集合结果、连接表、DNS 历史不能替代这些能力。
 - **TUN 与终端平台功能**：现在是 REDIRECT/TPROXY，tun.enable=false；桌面托盘、快捷键、Android 磁贴和按终端 App/进程分流不适用于当前路由器管理端。
 
 FlClash 使用其修改过的 mihomo 子模块及事件/回调；本插件使用官方 mihomo 二进制与 REST API。需要扩展内核事件接口的功能不能仅加按钮宣称完成。
@@ -67,3 +67,7 @@ FlClash 使用其修改过的 mihomo 子模块及事件/回调；本插件使用
 对照同一固定提交的 [CustomProxy / ProxyGroup 模型与字段](https://github.com/chen08209/FlClash/blob/7fd417fb9a9a277c6a9339a8ac87f907df7c25f7/lib/models/clash_config.dart#L79)，并核对随包 mihomo v1.19.33 的 adapter/parser.go：提供 28 种协议类型入口、常用字段及单项高级 YAML。部分复杂协议仍需高级 YAML，未声称每种可选字段都有专用控件或所有协议已联网测试。
 
 节点/组流程、保留未知字段/注释、引用同步、去重、循环检测、旧稿保护已有回归。实际编辑器生成的组配置通过本机 mihomo -t；原生内核测试确认错误编辑不替换当前文件或重启运行内核。安装包 UI 的编辑与保存失败重试流程使用全拦截模拟 RPC，不能替代 GT-AX6000 真机验收。
+
+## 0.3.9 连通与节点卡片
+
+概览包含接口状态、直连参考站点、常用站点 HTTPS 连通和手动流媒体页面信号检查。节点页支持本机测速内核与正式接管分离；自动策略组默认折叠，手动选择组优先。该模式是路由器侧适配，不是复制桌面系统代理开关。网站连通不代表各 LAN 设备透明代理完整验收；流媒体页面信号不是登录播放验收，详见 [说明](CONNECTIVITY.md)。

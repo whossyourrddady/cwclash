@@ -2,7 +2,16 @@
 
 面向 GT-AX6000、带 ASUS GO / Koolshare 软件中心的 ASUSWRT-Merlin 独立插件。以 mihomo 为代理内核，提供中文配置、订阅、代理组、规则、连接、DNS、设备分流、内核更新回退和备份管理。
 
-## 当前交付：0.3.8 USB 完整版
+## 当前交付：0.3.9 USB 完整版
+
+0.3.9 在概览顶部增加 LAN 网桥、WAN 接口/物理链路、外网直连及 12 个常用网站状态（GitHub、Google、ChatGPT、Claude、Gemini、YouTube、X、Telegram、Discord、Reddit、Wikipedia、Bing）。可见页面约每 5 分钟检测，显示检测时间，切换线路/配置或结果过期后提示刷新。HTTPS 连通与账号/服务可用分开表达，403/429 不会误报为断网。
+
+流媒体手动检查 Netflix 两个片目样本、YouTube Premium、Disney+、Spotify、Prime Video、Max/HBO Max、Apple TV、Twitch。页面明确的地区限制与疑似可用信号单独展示；没有证据时保持“待验证”，不把首页 200 当成已解锁。
+
+节点页新增「仅启动内核测速」：mihomo 只监听本机，不启用透明代理、DNS 接管、TUN 或 tunnels；测速/选好节点后，点击「启用路由器代理」才接管流量。测速选择会保留，编辑配置、换模式、重启不会隐式升级为接管模式。测速模式不作为开机启用状态保存。
+
+手动选择组优先展开，自动选择、故障转移、负载均衡和其他列表默认折叠；GLOBAL 仅全局模式显示。完整解释与边界见 [连通检测和测速模式](docs/CONNECTIVITY.md)。
+
 
 0.3.8 增加「配置 → 编辑节点/组」与「节点 → 编辑当前配置节点/组」。支持节点/组新增、复制、改名、删除，协议凭据、TLS/传输与前置代理，组成员顺序、集合引用、自动测速、回退和负载均衡参数；高级 YAML 用于复杂或未提供专用表单的字段。常见改名引用同步更新，重复名称、循环引用、无效端口会提示修正。配置外的插件设置引用受保护；共享锚点/别名需要先在 YAML 编辑器展开。
 
@@ -30,9 +39,9 @@ Go 全包测试、vet 和模块加载/临时链清理模拟通过；仍待 GT-AX
 
 0.3.2 修复 0.3.1 版本文件 CRLF 导致安装器误报“管理程序无法在当前固件运行”。构建统一写入 LF，审计严格检查原始字节；安装日志分别报告启动失败和版本不匹配。0.3.1 此处失败发生在修改现有安装之前，直接使用新版完整包重试即可。
 
-[下载 USB 安装包](https://github.com/whossyourrddady/cwclash/releases/download/v0.3.8/cwclash_hnd_v8_usb_0.3.8.tar.gz) · [版本说明、源码与校验文件](https://github.com/whossyourrddady/cwclash/releases/tag/v0.3.8)。这是私人仓库，需要使用有权限的 GitHub 账号访问。
+[下载 USB 安装包](https://github.com/whossyourrddady/cwclash/releases/download/v0.3.9/cwclash_hnd_v8_usb_0.3.9.tar.gz) · [版本说明、源码与校验文件](https://github.com/whossyourrddady/cwclash/releases/tag/v0.3.9)。这是私人仓库，需要使用有权限的 GitHub 账号访问。
 
-使用官方 USB2JFFS 将健康的 EXT4 U 盘挂载到 `/jffs`，再通过软件中心离线安装 **`cwclash_hnd_v8_usb_0.3.8.tar.gz`**。一份包包含管理端、界面和官方 [mihomo v1.19.33](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.33) Linux ARM64 内核，无需先装引导包。
+使用官方 USB2JFFS 将健康的 EXT4 U 盘挂载到 `/jffs`，再通过软件中心离线安装 **`cwclash_hnd_v8_usb_0.3.9.tar.gz`**。一份包包含管理端、界面和官方 [mihomo v1.19.33](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.33) Linux ARM64 内核，无需先装引导包。
 
 - 包大小约 25.4 MB，持久文件约 58.5 MiB；安装器额外保留至少 128 MiB，供更新和回退使用。规则、GeoIP、配置和缓存还会继续占用 U 盘空间。
 - 安装前核对 `/jffs`、软件中心和插件目标目录确实位于同一块可写 USB EXT4 分区；条件不符时拒绝安装。

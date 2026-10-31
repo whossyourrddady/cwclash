@@ -13,7 +13,7 @@ import (
 )
 
 func (a *App) dispatch(ctx context.Context, action string, p json.RawMessage) (any, error) {
-	if !contains([]string{"status", "state.get", "jobs.get", "logs", "probe", "storage.inspect", "service.stop"}, action) {
+	if !contains([]string{"status", "state.get", "jobs.get", "logs", "probe", "storage.inspect", "service.stop", "connectivity.get", "connectivity.check", "connectivity.media"}, action) {
 		if err := a.ensureStorage(); err != nil {
 			return nil, err
 		}
@@ -40,6 +40,12 @@ func (a *App) dispatch(ctx context.Context, action string, p json.RawMessage) (a
 		return nil, fmt.Errorf("参数格式无效")
 	}
 	switch action {
+	case "connectivity.get":
+		return a.connectivityState(), nil
+	case "connectivity.check":
+		return a.beginConnectivity("basic")
+	case "connectivity.media":
+		return a.beginConnectivity("media")
 	case "status":
 		return a.status(ctx), nil
 	case "state.get":
@@ -85,7 +91,7 @@ func (a *App) dispatch(ctx context.Context, action string, p json.RawMessage) (a
 		}
 		copy := *j
 		return copy, nil
-	case "service.start", "service.stop", "service.restart", "service.nat":
+	case "service.start", "service.preview", "service.stop", "service.restart", "service.nat":
 		if action == "service.stop" {
 			a.cancelProfileTasks()
 		}
@@ -93,9 +99,14 @@ func (a *App) dispatch(ctx context.Context, action string, p json.RawMessage) (a
 			a.op.Lock()
 			defer a.op.Unlock()
 			switch action {
+			case "service.preview":
+				return nil, a.startPreview()
 			case "service.stop":
 				return nil, a.stopService(true)
 			case "service.nat":
+				if a.isPreview() {
+					return nil, nil
+				}
 				if a.isRunning() {
 					return nil, a.applyNetwork(a.snapshot())
 				}
@@ -106,6 +117,9 @@ func (a *App) dispatch(ctx context.Context, action string, p json.RawMessage) (a
 			case "service.restart":
 				if err := a.stopService(false); err != nil {
 					return nil, err
+				}
+				if a.isPreview() {
+					return nil, a.startService(false)
 				}
 			}
 			return nil, a.startService(true)
@@ -347,6 +361,7 @@ func (a *App) status(ctx context.Context) map[string]any {
 	started := a.started
 	a.mu.RUnlock()
 	data := map[string]any{"running": running, "enabled": s.Enabled, "version": a.version, "kernel": s.Kernel, "activeProfile": s.ActiveProfile, "mode": s.Settings.Mode, "uptime": int(time.Since(started).Seconds()), "error": lastError, "dev": a.dev, "network": a.networkSummary(s), "storageMode": a.storageMode}
+	data["preview"] = running && a.isPreview()
 	if running {
 		if c, err := a.controller(ctx, "GET", "/connections", nil, nil); err == nil {
 			if m, ok := c.(map[string]any); ok {

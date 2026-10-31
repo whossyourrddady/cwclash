@@ -137,10 +137,14 @@ type App struct {
 	jobs            map[string]*Job
 	profileTasks    map[string]context.CancelFunc
 	validationSlot  chan struct{}
+	healthMu        sync.Mutex
+	healthReports   map[string]*HealthReport
+	healthJobs      map[string]string
 	logs            []LogEntry
 	dnsQueries      []DNSQuery
 	sequence        uint64
 	core            *Core
+	previewMode     bool // guarded by mu; volatile, never resumes traffic interception
 	started         time.Time
 	lastError       string
 	token           string

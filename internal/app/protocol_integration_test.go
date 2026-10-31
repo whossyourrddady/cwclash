@@ -262,6 +262,72 @@ func TestNativeProtocolLoopback(t *testing.T) {
 	}
 	defer a.stopService(false)
 	proxyURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", s.Settings.MixedPort))
+	t.Run("preview-measure-select-and-promote", func(t *testing.T) {
+		if err := a.stopService(true); err != nil {
+			t.Fatal(err)
+		}
+		if err := a.startPreview(); err != nil {
+			t.Fatal(err)
+		}
+		if !a.isRunning() || !a.isPreview() || a.snapshot().Enabled || a.dns != nil {
+			t.Fatal("preview captured traffic or failed to run")
+		}
+		active, err := os.ReadFile(filepath.Join(a.run, "active.yaml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		doc, err := parseYAML(active)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if doc["bind-address"] != "127.0.0.1" || doc["redir-port"] != 0 || doc["tproxy-port"] != 0 || asMap(doc["dns"])["enable"] != false {
+			t.Fatal("preview listeners not isolated")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, err = a.controller(ctx, "GET", "/proxies/"+escapeSegment(names[0])+"/delay", map[string]string{"url": echo.URL, "timeout": "3000"}, nil); err != nil {
+			t.Fatal("preview delay failed", err)
+		}
+		if err = a.selectGroup(ctx, "Test", names[0]); err != nil {
+			t.Fatal(err)
+		}
+		if err = a.setMode(ctx, "global"); err != nil {
+			t.Fatal(err)
+		}
+		if err = a.setMode(ctx, "rule"); err != nil {
+			t.Fatal(err)
+		}
+		current := *findProfile(a.snapshot(), a.snapshot().ActiveProfile)
+		if _, err = a.saveProfile(context.Background(), current, string(profile)+"\n# edited in preview\n"); err != nil {
+			t.Fatal(err)
+		}
+		if !a.isPreview() || a.dns != nil || a.snapshot().Enabled {
+			t.Fatal("editing promoted preview to capture")
+		}
+		job, err := a.dispatch(context.Background(), "service.restart", json.RawMessage(`{}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result := waitTestJob(t, a, job); result.Status != "done" {
+			t.Fatal(result.Message)
+		}
+		if !a.isPreview() || a.dns != nil {
+			t.Fatal("restart promoted preview")
+		}
+		if err = a.startService(true); err != nil {
+			t.Fatal(err)
+		}
+		if a.isPreview() || !a.snapshot().Enabled || a.dns == nil {
+			t.Fatal("explicit activation did not promote")
+		}
+		if a.snapshot().Selections[current.ID]["Test"] != names[0] {
+			t.Fatal("preview selection lost")
+		}
+		// Restore the shared fixture bytes before subsequent lifecycle subtests.
+		if _, err = a.saveProfile(context.Background(), current, string(profile)); err != nil {
+			t.Fatal(err)
+		}
+	})
 	t.Run("profile-save-restart-boundary", func(t *testing.T) {
 		original := a.core
 		current := *findProfile(a.snapshot(), a.snapshot().ActiveProfile)

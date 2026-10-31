@@ -2,6 +2,7 @@
 import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
 import Icon from './Icon.vue'
 import ProxyEditor from './ProxyEditor.vue'
+import ConnectivityPanel from './ConnectivityPanel.vue'
 import {readCatalog} from './proxy-editor'
 import { subscriptionSummary, orderNodes, currentDelay, historyKey, defaultTestURL } from './presentation'
 import { rpc, actionJob, uploadFile, downloadFile } from './api'
@@ -138,12 +139,12 @@ let timer: ReturnType<typeof setInterval>
 let toastTimer: ReturnType<typeof setTimeout>
 
 const profileName = computed(() => state.value?.profiles.find(p => p.id === state.value?.activeProfile)?.name || '尚未选择配置')
-const capturing = computed(() => connected.value && !!status.value?.running && status.value.mode !== 'direct')
-const serviceLabel = computed(() => !connected.value ? '状态待确认' : capturing.value ? '局域网代理已启用' : status.value?.running ? '直连模式 · 内核运行中' : '代理已停止 · 当前使用直连')
-const heroDescription = computed(() => !connected.value ? '管理服务连接中断，暂时无法确认路由器的代理状态。请重新连接后查看。' : capturing.value ? `正在使用「${profileName.value}」，为局域网设备提供${modeLabel(status.value?.mode)}分流。` : status.value?.running ? '局域网设备直接联网，mihomo 保留供手动代理使用。' : '导入 Clash 配置，选择适合的线路，即可开启路由器代理。')
+const capturing = computed(() => connected.value && !!status.value?.running && !status.value.preview && status.value.mode !== 'direct')
+const serviceLabel = computed(() => !connected.value ? '状态待确认' : capturing.value ? '局域网代理已启用' : status.value?.preview ? '测速模式 · 未接管家庭网络' : status.value?.running ? '直连模式 · 内核运行中' : '代理已停止 · 当前使用直连')
+const heroDescription = computed(() => !connected.value ? '管理服务连接中断，暂时无法确认路由器的代理状态。请重新连接后查看。' : capturing.value ? `正在使用「${profileName.value}」，为局域网设备提供${modeLabel(status.value?.mode)}分流。` : status.value?.preview ? '内核仅供测速和选择节点；选好线路后点击启用路由器代理。' : status.value?.running ? '局域网设备直接联网，mihomo 保留供手动代理使用。' : '导入 Clash 配置，选择适合的线路，即可开启路由器代理。')
 const groups = computed(() => Object.entries(proxyData.value).filter(([, p]) => Array.isArray(p.all)).map(([name, p]) => ({ ...p, name })))
 const displayGroups = computed(() => {
-  const result = groups.value
+  const result = groups.value.filter(g=>g.name!=='GLOBAL'||status.value?.mode==='global').sort((a,b)=>Number(isManualGroup(b))-Number(isManualGroup(a)))
   if (proxySource.value !== 'config') return result
   const members = new Set(result.flatMap(g => g.all))
   const nodes = Object.keys(proxyData.value).filter(n => !Array.isArray(proxyData.value[n].all) && !members.has(n))
@@ -151,6 +152,9 @@ const displayGroups = computed(() => {
 })
 const groupNames = computed(() => groups.value.map(g => g.name))
 const expandedGroups = ref<Record<string, boolean>>({})
+function isManualGroup(group:any){return ['selector','select'].includes(String(group.type).toLowerCase())}
+function groupExpanded(group:any){return expandedGroups.value[group.name] ?? isManualGroup(group)}
+function previewCore(){void run('正在启动测速内核',()=>actionJob('service.preview'),'测速内核已就绪，家庭网络未接管')}
 const filteredConnections = computed(() => connections.value.filter(c => JSON.stringify(c.metadata || {}).toLowerCase().includes(search.value.toLowerCase())))
 const filteredRules = computed(() => rules.value.filter(r => `${r.type} ${r.payload} ${r.proxy}`.toLowerCase().includes(search.value.toLowerCase())))
 const filteredLogs = computed(() => logs.value.filter(l => (logLevel.value === 'all' || l.level === logLevel.value) && l.message.toLowerCase().includes(search.value.toLowerCase())))
@@ -240,7 +244,7 @@ async function poll() {
   finally { polling = false }
 }
 
-function service() { void run(status.value?.running ? '正在停止代理' : '正在启动代理', () => actionJob(status.value?.running ? 'service.stop' : 'service.start'), status.value?.running ? '已恢复直连' : '代理已启动') }
+function service() { const stopping=status.value?.running&&!status.value?.preview;void run(stopping?'正在停止代理':'正在启动代理',()=>actionJob(stopping?'service.stop':'service.start'),stopping?'已恢复直连':'代理已启动') }
 function changeMode(mode: string) { void run('正在切换模式', () => rpc('mode.set', { mode }), `已切换${modeLabel(mode)}模式`) }
 
 function newProfile() {
@@ -387,6 +391,7 @@ onUnmounted(() => { clearInterval(timer); clearTimeout(toastTimer); window.remov
       <div v-if="busy" class="operation-bar" role="status"><span class="spinner" /><span>{{ busy }}</span><span v-if="progress">{{ progress }}%</span><div v-if="progress" class="progress-track"><div :style="{ width: progress + '%' }" /></div></div>
 
       <template v-if="page === 'overview'">
+        <ConnectivityPanel :connected="connected" :preview="status?.preview" />
         <div class="health-grid"><article class="card"><span>管理服务</span><strong :class="connected ? 'positive' : 'negative'">{{ connected ? '已连接' : '未连接' }}</strong><button class="text-button" :disabled="!!busy" @click="run('正在重新连接', () => loadState())">重新连接</button></article><article class="card"><span>mihomo 内核</span><strong :class="connected && status?.running ? 'positive' : 'warning'">{{ !connected ? '状态未知' : status?.running ? '运行中' : '已停止' }}</strong><button class="text-button" @click="navigate('logs')">查看日志</button></article><article class="card"><span>DNS</span><strong>{{ connected ? status?.network.dnsMode : '状态未知' }}</strong><button class="text-button" @click="navigate('dns')">测试域名解析</button><small>模式信息不代表解析检测结果</small></article><article class="card"><span>持久存储</span><strong>{{ storageInfo ? (storageInfo.ready ? '最近检查通过' : '查看检查结果') : '尚未检查' }}</strong><button class="text-button" @click="settingsTab='system'; navigate('settings')">检查挂载与容量</button></article></div><p v-if="status?.error" class="banner danger" role="alert">{{ status.error }} · 请查看日志定位启动原因。</p>
         <section :class="['hero-card', { running: capturing }]">
           <div class="hero-copy">
@@ -394,7 +399,7 @@ onUnmounted(() => { clearInterval(timer); clearTimeout(toastTimer); window.remov
             <h2>{{ serviceLabel }}</h2>
             <p>{{ heroDescription }}</p>
             <div class="hero-controls">
-              <button :class="['button', capturing ? 'button-light' : 'button-primary']" :disabled="!!busy || !connected" @click="service"><Icon name="power" />{{ status?.running ? '停止代理' : '启动代理' }}</button>
+              <button :class="['button', capturing ? 'button-light' : 'button-primary']" :disabled="!!busy || !connected" @click="service"><Icon name="power" />{{ status?.preview ? '启用路由器代理' : status?.running ? '停止代理' : '启动代理' }}</button>
               <button v-if="!state?.profiles.length" class="text-button" @click="navigate('profiles'); newProfile()">导入配置 <Icon name="chevron" :size="15" /></button>
               <span v-else class="hero-profile"><Icon name="folder" :size="16" />{{ profileName }}</span>
             </div>
@@ -412,6 +417,7 @@ onUnmounted(() => { clearInterval(timer); clearTimeout(toastTimer); window.remov
       </template>
 
       <template v-else-if="page === 'proxies'">
+        <section class="card"><div class="section-heading"><div><h3>{{ status?.preview?'测速内核运行中':'先测速，再启用代理' }}</h3><p>{{ status?.preview?'家庭网络未接管，可测速和预选线路。':'测速需要 mihomo；可以仅启动内核，不改变家庭网络接管。' }}</p></div><div class="button-row"><button v-if="!status?.running" class="button button-primary" :disabled="!!busy||!state?.activeProfile" @click="previewCore">仅启动内核测速</button><template v-if="status?.preview"><button class="button button-primary" :disabled="!!busy" @click="service">启用路由器代理</button><button class="button button-secondary" :disabled="!!busy" @click="run('正在停止测速内核',()=>actionJob('service.stop'),'测速内核已停止')">停止测速内核</button></template></div></div></section>
         <div class="button-row"><button class="button button-secondary" :disabled="!!busy || !state?.activeProfile" @click="openVisual(state?.profiles.find(p=>p.id===state?.activeProfile))">编辑当前配置节点/组</button></div><details class="card"><summary>测速与切换设置</summary><div class="form-grid"><label>测速地址<input v-model="nodePrefs.url" :disabled="!!busy" type="url" /></label><label>超时（毫秒）<input v-model.number="nodePrefs.timeout" :disabled="!!busy" type="number" min="1000" max="15000" /></label><label>测速并发<input v-model.number="nodePrefs.concurrency" :disabled="!!busy" type="number" min="1" max="8" /></label><label class="check-setting"><input v-model="nodePrefs.closeConnections" :disabled="!!busy" type="checkbox" /><span>切换线路后关闭全部旧连接<small>现有下载、视频等连接会重新建立，默认关闭。</small></span></label></div><button class="button button-secondary button-small" :disabled="!!busy" @click="saveNodePrefs">保存操作偏好</button><p class="field-help">保存在当前浏览器。测量延迟，不是下载带宽；更换测试地址后重新测速。内核历史没有测试地址标记时，不用于自定义地址结果。</p></details>
         <div v-if="batchActive" class="banner"><span>{{ batchCancelled ? '正在结束已发出的测速请求…' : '批量测速进行中' }}</span><button class="button button-secondary button-small" :disabled="batchCancelled" @click="batchCancelled=true">取消剩余测速</button><small>已发出的请求等待完成或超时，不再发送后续节点。</small></div>
 
@@ -420,7 +426,7 @@ onUnmounted(() => { clearInterval(timer); clearTimeout(toastTimer); window.remov
         <p v-if="batchSummary" class="banner" role="status">{{ batchSummary }}</p>
         <section v-for="provider in providerPreviews" :key="provider.name" class="card"><div class="section-heading"><div><h3>{{ provider.name }}</h3><p>{{ provider.source }} · {{ provider.nodes.length }} 个节点<span v-if="provider.updatedAt"> · 文件时间 {{ date(provider.updatedAt) }}</span></p></div></div><div class="node-grid"><div v-for="(node,i) in provider.nodes.filter((n:any) => !search || n.name.toLowerCase().includes(search.toLowerCase()))" :key="i" class="node-card"><span class="node-copy"><strong>{{ node.name }}</strong><small>{{ node.type }}{{ node.udp ? ' · UDP' : '' }}</small></span></div></div><p v-if="!provider.nodes.length" class="field-help">暂无可预览数据，内核运行并加载集合后可查看。旧版本缓存首次升级后需重新加载。</p></section>
         <div v-if="!displayGroups.length && !providerPreviews.length" class="empty-state card"><h3>{{ state?.activeProfile ? '配置中暂无可预览的节点' : '尚未选择配置' }}</h3><p>可前往配置页导入或选择配置；集合中的节点需内核加载。</p><button class="button button-secondary" @click="navigate('profiles')">管理配置</button></div>
-        <section v-for="group in displayGroups" v-show="!search || group.name.toLowerCase().includes(search.toLowerCase()) || group.all.some((n:string) => n.toLowerCase().includes(search.toLowerCase()))" :key="`${group.catalog ? 'catalog' : 'group'}:${group.name}`" class="card proxy-group"><div class="section-heading"><button class="group-title" @click="expandedGroups[group.name] = expandedGroups[group.name] === false"><Icon name="globe" /><span><h3>{{ group.name }}</h3><small>{{ group.type }} · {{ canUseNodes ? (group.now || '自动选择') : '配置预览' }}</small></span></button><button class="button button-secondary button-small" :disabled="!!busy || !canUseNodes" title="内核运行时可测速" @click="testGroup(group)"><Icon name="bolt" :size="15" />测速</button></div><p v-if="!visibleNodes(group).length" class="field-help">没有匹配的节点，请调整搜索或筛选。</p><div v-if="expandedGroups[group.name] !== false" class="node-grid"><div v-for="node in visibleNodes(group)" :key="node" :class="['node-card', { selected: canUseNodes && group.now === node }]"><button class="favorite-button" :aria-label="(isFavorite(group.name,node) ? '取消收藏 ' : '收藏 ') + node" :aria-pressed="isFavorite(group.name,node)" @click="toggleFavorite(group.name,node)">{{ isFavorite(group.name,node) ? '★' : '☆' }}</button><button class="node-select" :disabled="!!busy || !canUseNodes || group.type !== 'Selector'" @click="selectProxy(group.name,node)"><span class="node-radio"><Icon v-if="canUseNodes && group.now === node" name="check" :size="12" /></span><span class="node-copy"><strong>{{ node }}</strong><small>{{ proxyData[node]?.type || ({ DIRECT: '直连', REJECT: '拒绝', 'REJECT-DROP': '丢弃' } as Record<string, string>)[node] || '代理组' }}{{ proxyData[node]?.udp ? ' · UDP' : '' }}</small></span></button><button :class="['node-delay', { good: delay(node)! > 0 && delay(node)! < 300, poor: delay(node) === 0 || delay(node)! >= 600 }]" :disabled="!!busy || !canUseNodes" :title="canUseNodes ? '测试延迟' : '内核运行后可测速'" @click="testDelay(node)">{{ !canUseNodes ? '未测速' : delay(node) === null ? '测速' : delay(node) === 0 ? '失败' : `${delay(node)} ms` }}</button></div></div></section>
+        <section v-for="group in displayGroups" v-show="!search || group.name.toLowerCase().includes(search.toLowerCase()) || group.all.some((n:string) => n.toLowerCase().includes(search.toLowerCase()))" :key="`${group.catalog ? 'catalog' : 'group'}:${group.name}`"  :class="['card','proxy-group',{'group-collapsed':!groupExpanded(group)}]"><div class="section-heading"><button class="group-title" @click="expandedGroups[group.name] = !groupExpanded(group)"><Icon name="globe" /><span><h3>{{ group.name }}</h3><small>{{ groupExpanded(group) ? '点击收起' : '点击展开' }} · {{ group.all.length }} 个成员 · {{ group.type }} · {{ canUseNodes ? (group.now || '自动选择') : '配置预览' }}</small></span></button><button class="button button-secondary button-small" :disabled="!!busy || !canUseNodes" title="内核运行时可测速" @click="testGroup(group)"><Icon name="bolt" :size="15" />测速</button></div><p v-if="!visibleNodes(group).length" class="field-help">没有匹配的节点，请调整搜索或筛选。</p><div v-if="groupExpanded(group)" class="node-grid"><div v-for="node in visibleNodes(group)" :key="node" :class="['node-card', { selected: canUseNodes && group.now === node }]"><button class="favorite-button" :aria-label="(isFavorite(group.name,node) ? '取消收藏 ' : '收藏 ') + node" :aria-pressed="isFavorite(group.name,node)" @click="toggleFavorite(group.name,node)">{{ isFavorite(group.name,node) ? '★' : '☆' }}</button><button class="node-select" :disabled="!!busy || !canUseNodes || !isManualGroup(group)" @click="selectProxy(group.name,node)"><span class="node-radio"><Icon v-if="canUseNodes && group.now === node" name="check" :size="12" /></span><span class="node-copy"><strong>{{ node }}</strong><small>{{ proxyData[node]?.type || ({ DIRECT: '直连', REJECT: '拒绝', 'REJECT-DROP': '丢弃' } as Record<string, string>)[node] || '代理组' }}{{ proxyData[node]?.udp ? ' · UDP' : '' }}</small></span></button><button :class="['node-delay', { good: delay(node)! > 0 && delay(node)! < 300, poor: delay(node) === 0 || delay(node)! >= 600 }]" :disabled="!!busy || !canUseNodes" :title="canUseNodes ? '测试延迟' : '内核运行后可测速'" @click="testDelay(node)">{{ !canUseNodes ? '未测速' : delay(node) === null ? '测速' : delay(node) === 0 ? '失败' : `${delay(node)} ms` }}</button></div></div></section>
       </template>
 
       <template v-else-if="page === 'rules'">

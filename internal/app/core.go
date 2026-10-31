@@ -187,7 +187,35 @@ func coreEnvironment(assetsDir string) []string {
 }
 
 func (a *App) startService(persistEnabled bool) error {
+	if persistEnabled && a.isPreview() {
+		if err := a.stopService(false); err != nil {
+			return err
+		}
+		a.mu.Lock()
+		a.previewMode = false
+		a.mu.Unlock()
+	}
 	return a.startPreparedService(persistEnabled, nil)
+}
+
+func (a *App) isPreview() bool { a.mu.RLock(); defer a.mu.RUnlock(); return a.previewMode }
+
+func (a *App) startPreview() error {
+	if a.isRunning() {
+		return nil
+	}
+	if err := a.stopService(false); err != nil {
+		return err
+	}
+	s := a.snapshot()
+	s.Enabled = false
+	if err := a.persist(s); err != nil {
+		return err
+	}
+	a.mu.Lock()
+	a.previewMode = true
+	a.mu.Unlock()
+	return a.startService(false)
 }
 
 // Caller holds op; prepared bytes were validated against the current settings/kernel.
@@ -204,7 +232,7 @@ func (a *App) startPreparedService(persistEnabled bool, prepared []byte) error {
 		return nil
 	}
 	s := a.snapshot()
-	if !a.dev {
+	if !a.dev && !a.isPreview() {
 		if runtime.GOOS != "linux" || runtime.GOARCH != "arm64" {
 			return fmt.Errorf("此安装包仅支持 Linux ARM64 路由器")
 		}
@@ -233,12 +261,25 @@ func (a *App) startPreparedService(persistEnabled bool, prepared []byte) error {
 			return err
 		}
 	}
+	if a.isPreview() {
+		b, err = previewConfig(b)
+		if err != nil {
+			return err
+		}
+	}
 	active := filepath.Join(a.run, "active.yaml")
 	if err = atomicWrite(active, b, 0600); err != nil {
 		return err
 	}
 	if err = a.launchCore(s, active); err != nil {
 		return err
+	}
+	if a.isPreview() {
+		a.mu.Lock()
+		a.lastError = ""
+		a.mu.Unlock()
+		a.log("info", "测速内核已启动：仅本机监听，未接管 LAN、DNS 或策略路由")
+		return nil
 	}
 	dns, err := a.startDNS(s.Settings.DNSPort)
 	if err != nil {
@@ -356,6 +397,9 @@ func (a *App) stopService(persistDisabled bool) error {
 	}
 	_ = a.stopCore()
 	if persistDisabled {
+		a.mu.Lock()
+		a.previewMode = false
+		a.mu.Unlock()
 		s := a.snapshot()
 		s.Enabled = false
 		if saveErr := a.persist(s); saveErr != nil {
@@ -417,7 +461,7 @@ func (a *App) setMode(ctx context.Context, mode string) error {
 	if !a.isRunning() {
 		return a.persist(next)
 	}
-	if !a.dev {
+	if !a.dev && !a.isPreview() {
 		if err := a.preflightNetwork(next); err != nil {
 			return err
 		}

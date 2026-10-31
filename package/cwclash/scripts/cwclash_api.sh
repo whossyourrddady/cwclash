@@ -7,6 +7,7 @@ CW_RUN=/tmp/cwclash-run
 CW_BIN=${CW_RUN}/cwclash
 case "$1" in ''|*[!0-9]*) exit 1 ;; esac
 case "$2" in
+  service.preview|connectivity.get|connectivity.check|connectivity.media) ;;
   status|state.get|probe|storage.inspect|storage.cleanAsd|storage.undoAsd|jobs.get|service.start|service.stop|service.restart|service.nat|settings.save|devices.list|devices.save|profiles.save|profiles.read|profiles.select|profiles.update|profiles.delete|core.check|core.upgrade|core.rollback|upload.begin|upload.chunk|upload.finish|upload.cancel|download.begin|download.chunk|download.cancel|logs|dns.history|dns.query|groups|groups.select|groups.delay|connections|connections.close|rules|providers|providers.update|mode.set|cache.clear) ;;
   *) exit 1 ;;
 esac

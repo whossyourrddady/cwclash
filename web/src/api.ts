@@ -11,7 +11,7 @@ export type Settings = {
 }
 export type Kernel = { version: string; file: string; sha256: string; previous?: Kernel }
 export type State = { schema: number; enabled: boolean; activeProfile: string; profiles: Profile[]; devices: DevicePolicy[]; settings: Settings; kernel: Kernel }
-export type Status = { running: boolean; enabled: boolean; version: string; kernel: Kernel; activeProfile: string; mode: string; uptime: number; error?: string; dev: boolean; storageMode?: string; uploadTotal?: number; downloadTotal?: number; connectionCount?: number; memory?: number; network: { lanInterface: string; ipv6: string; dnsMode: string; failOpen: boolean; mixedPort: number } }
+export type Status = { running: boolean; preview?: boolean; enabled: boolean; version: string; kernel: Kernel; activeProfile: string; mode: string; uptime: number; error?: string; dev: boolean; storageMode?: string; uploadTotal?: number; downloadTotal?: number; connectionCount?: number; memory?: number; network: { lanInterface: string; ipv6: string; dnsMode: string; failOpen: boolean; mixedPort: number } }
 
 function encode(value: unknown): string {
   const bytes = new TextEncoder().encode(JSON.stringify(value))
