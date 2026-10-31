@@ -64,7 +64,9 @@ if (!bootstrap) {
  }
 }
 await copyFile('LICENSE', join(pkg, 'LICENSE')); await copyFile('THIRD_PARTY.md', join(pkg, 'THIRD_PARTY.md'))
-for (const name of ['app.js', 'style.css']) await copyFile(join('web/dist', name), join(pkg, 'res/cwclash', name))
+// Legacy ASUS do_file opens the raw path including any query string.
+// Put CSS cache identity in the filename instead of using ?v=.
+for (const name of ['app.js', 'style.css']) await copyFile(join('web/dist', name), join(pkg, 'res/cwclash', name === 'style.css' ? `style-${version}.css` : name))
 
 // Small code-drawn PNG for software centers that require icon-NAME.png.
 const width=128, pixels=Buffer.alloc((width*4+1)*width)

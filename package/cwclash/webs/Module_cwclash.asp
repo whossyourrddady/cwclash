@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="/index_style.css">
   <link rel="stylesheet" href="/form_style.css">
   <link rel="stylesheet" href="/res/softcenter.css">
-  <link rel="stylesheet" href="/res/cwclash/style.css?v=__CW_VERSION__">
+  <link rel="stylesheet" href="/res/cwclash/style-__CW_VERSION__.css">
   <script src="/js/jquery.js"></script>
   <script src="/state.js"></script>
   <script src="/popup.js"></script>
