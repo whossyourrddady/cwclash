@@ -13,7 +13,7 @@ import (
 	"cwclash/internal/app"
 )
 
-var version = "0.3.6-dev"
+var version = "0.3.7-dev"
 var storageMode = app.StorageNative
 
 func main() {

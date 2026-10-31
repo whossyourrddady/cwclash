@@ -128,6 +128,23 @@ func (a *App) coreDataDir() string {
 }
 
 func (a *App) validateConfigIn(ctx context.Context, config []byte, k KernelState, dataDir, assetsDir string) error {
+	// Serialize temporary cores without holding the service lock. Waiting
+	// imports remain cancellable and cannot multiply router memory usage.
+	a.mu.Lock()
+	if a.validationSlot == nil {
+		a.validationSlot = make(chan struct{}, 1)
+	}
+	slot := a.validationSlot
+	a.mu.Unlock()
+	select {
+	case slot <- struct{}{}:
+		defer func() { <-slot }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if a.dev && k.File == "" {
 		return nil
 	}
@@ -170,6 +187,11 @@ func coreEnvironment(assetsDir string) []string {
 }
 
 func (a *App) startService(persistEnabled bool) error {
+	return a.startPreparedService(persistEnabled, nil)
+}
+
+// Caller holds op; prepared bytes were validated against the current settings/kernel.
+func (a *App) startPreparedService(persistEnabled bool, prepared []byte) error {
 	if err := a.ensureStorage(); err != nil {
 		return err
 	}
@@ -196,17 +218,20 @@ func (a *App) startService(persistEnabled bool) error {
 			return err
 		}
 	}
-	path, err := a.prepareConfig(s)
-	if err != nil {
-		return err
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	ctx := a.operationContext()
-	if err = a.validateConfig(ctx, b, s.Kernel); err != nil {
-		return err
+	b := prepared
+	var err error
+	if b == nil {
+		path, prepareErr := a.prepareConfig(s)
+		if prepareErr != nil {
+			return prepareErr
+		}
+		b, err = os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if err = a.validateConfig(a.operationContext(), b, s.Kernel); err != nil {
+			return err
+		}
 	}
 	active := filepath.Join(a.run, "active.yaml")
 	if err = atomicWrite(active, b, 0600); err != nil {
@@ -583,6 +608,7 @@ func (a *App) background() {
 }
 
 func (a *App) failOpen(reason string) {
+	a.cancelProfileTasks()
 	if err := a.stopService(false); err != nil {
 		a.setFailure(reason + "；网络规则清理未完全成功，请使用紧急恢复：" + err.Error())
 		return
@@ -605,11 +631,7 @@ func (a *App) scheduledUpdates() {
 				if time.Now().Before(nextProfileUpdate(profile)) {
 					continue
 				}
-				if !a.op.TryLock() {
-					continue
-				}
 				err := a.updateProfile(a.ctx, profile.ID)
-				a.op.Unlock()
 				if err != nil {
 					a.log("warning", "订阅自动更新失败，保留旧配置："+err.Error())
 				}

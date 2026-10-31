@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
 import Icon from './Icon.vue'
-import { subscriptionSummary, orderNodes } from './presentation'
+import { subscriptionSummary, orderNodes, currentDelay, historyKey, defaultTestURL } from './presentation'
 import { rpc, actionJob, uploadFile, downloadFile } from './api'
+import type { MeasuredDelay } from './presentation'
 import type { State, Status, Settings, Profile, DevicePolicy } from './api'
 
 const TextEncoder = globalThis.TextEncoder
@@ -37,7 +38,26 @@ const proxySource = ref('')
 const previewProviders = ref<string[]>([])
 const providerPreviews = ref<any[]>([])
 const nextUpdates = ref<Record<string,string>>({})
-const delayResults = ref<Record<string,number>>({})
+const delayResults = ref<Record<string,MeasuredDelay>>({})
+const nodePrefs = reactive(readNodePrefs())
+const batchActive = ref(false)
+const batchCancelled = ref(false)
+const stopPending = ref(false)
+const providerResults = ref<Record<string,string>>({})
+function readNodePrefs() {
+  const fallback = {url: defaultTestURL, timeout: 5000, concurrency: 4, closeConnections: false}
+  try { const value = {...fallback, ...JSON.parse(localStorage.getItem('cwclash.nodePrefs') || '{}')}; validateNodePrefs(value); return value } catch { return fallback }
+}
+function validateNodePrefs(value = nodePrefs) {
+  const u = new URL(value.url)
+  if (!['http:','https:'].includes(u.protocol) || value.timeout < 1000 || value.timeout > 15000 || !Number.isInteger(value.timeout) || !Number.isInteger(value.concurrency) || value.concurrency < 1 || value.concurrency > 8) throw new Error('请填写 HTTP(S) 测速地址、1000–15000 毫秒超时和 1–8 个并发')
+}
+function saveNodePrefs() {
+  try {
+    validateNodePrefs()
+    localStorage.setItem('cwclash.nodePrefs',JSON.stringify(nodePrefs)); delayResults.value = {}; toast('节点操作偏好已保存在当前浏览器')
+  } catch (e:any) { toast(e.message || '无法保存偏好','error') }
+}
 const batchSummary = ref('')
 let lastProfile = ''
 let groupsReadAt = 0
@@ -126,7 +146,7 @@ function bytes(n = 0) { if (!Number.isFinite(n) || n < 0) n = 0; const units = [
 function date(value?: string) { if (!value) return '未更新'; const d = new Date(value); return Number.isNaN(d.getTime()) ? value : d.toLocaleString('zh-CN', { hour12: false }) }
 function time(value?: string) { return value ? new Date(value).toLocaleTimeString('zh-CN', { hour12: false }) : '—' }
 function lines(value: string) { return value.split('\n').map(s => s.trim()).filter(Boolean) }
-function delay(name: string): number | null { if (Object.hasOwn(delayResults.value, name)) return delayResults.value[name]; const h = proxyData.value[name]?.history; return h?.length ? h[h.length - 1].delay : null }
+function delay(name: string): number | null { return currentDelay(delayResults.value[name], proxyData.value[name]?.history, nodePrefs.url) }
 function modeLabel(mode?: string) { return ({ rule: '规则', global: '全局', direct: '直连' } as Record<string, string>)[mode || ''] || '规则' }
 function ipv6Label(mode?: string) { return ({ auto: '自动', proxy: '透明代理', block: '阻止外网直出' } as Record<string, string>)[mode || ''] || mode || '—' }
 function ask(title: string, text: string, fn: () => void) { confirmation.value = { title, text, confirm: () => { confirmation.value = null; fn() } } }
@@ -144,7 +164,7 @@ async function loadState(reset = '') {
   const data = await rpc<{ state: State; nextUpdates?: Record<string,string> }>('state.get'); state.value = data.state; nextUpdates.value = data.nextUpdates || {}
   if (lastProfile !== data.state.activeProfile) { delayResults.value = {}; batchSummary.value = ''; proxyData.value = {}; providerPreviews.value = []; lastProfile = data.state.activeProfile }
   if (!settingsDirty.value || reset === 'settings' || reset === 'all') {
-  settings.value = structuredClone(data.state.settings)
+  settings.value = {geoAutoUpdate: null, geoUpdateHours: 0, providerUpdateHours: 0, ...structuredClone(data.state.settings)}
 
   for (const key of Object.keys(ruleForm) as (keyof typeof ruleForm)[]) ruleForm[key] = (data.state.settings[key] || []).join('\n')
   settingsBaseline.value = settingsDraft()
@@ -184,7 +204,7 @@ async function poll() {
   polling = true
   try {
     const next = await rpc<Status>('status'); status.value = next;
-    if (!next.running) { rules.value = []; providers.value = {}; delayResults.value = {}; batchSummary.value = '' }
+    if (!next.running) { batchCancelled.value = true; rules.value = []; providers.value = {}; delayResults.value = {}; batchSummary.value = '' }
     if (page.value === 'profiles' && !busy.value) { const data = await rpc<{state: State; nextUpdates?: Record<string,string>}>('state.get'); state.value = data.state; nextUpdates.value = data.nextUpdates || {} }
     connected.value = true; error.value = ''
     if (!state.value || !settings.value) await loadState()
@@ -227,29 +247,63 @@ function chooseProfile(profile: Profile) { void run('正在切换配置', () => 
 function updateProfile(profile: Profile) { void run('正在更新订阅', () => actionJob('profiles.update', { id: profile.id }), '订阅已更新') }
 function deleteProfile(profile: Profile) { if (state.value?.activeProfile === profile.id && status.value?.running) { toast('请先停止代理，再删除当前配置', 'error'); return }; ask('删除配置', `删除“${profile.name}”？`, () => void run('正在删除配置', () => rpc('profiles.delete', { id: profile.id }), '配置已删除')) }
 
-function selectProxy(group: string, node: string) { void run('正在选择线路', () => rpc('groups.select', { group, node }), '线路已切换') }
+function selectProxy(group: string, node: string) {
+  void run('正在选择线路', async () => {
+    await rpc('groups.select', {group,node})
+    if (nodePrefs.closeConnections) {
+      try { await rpc('connections.close') } catch { throw new Error('线路已切换，但旧连接关闭失败，请到连接页重试') }
+    }
+  }, nodePrefs.closeConnections ? '线路已切换，旧连接已关闭' : '线路已切换，已有连接继续使用原线路')
+}
+async function stopDuringTask() {
+  if (stopPending.value) return
+  stopPending.value = true; batchCancelled.value = true
+  try { await actionJob('service.stop'); await loadState(); await refreshPage(); toast('代理已停止，配置处理已取消') }
+  catch (e:any) { toast(e.message,'error') }
+  finally { stopPending.value = false }
+}
+
 async function measureDelay(name: string) {
+  validateNodePrefs()
+  const baseline = historyKey(proxyData.value[name]?.history), url = nodePrefs.url
   try {
-    const result = await rpc<{delay: number}>('groups.delay', { group: name })
+    const result = await rpc<{delay: number}>('groups.delay', { group: name, url, timeout: nodePrefs.timeout })
     if (!(result.delay > 0)) throw new Error('测速超时或无有效延迟')
-    delayResults.value[name] = result.delay
-  } catch (e) { delayResults.value[name] = 0; throw e }
+    delayResults.value[name] = {delay: result.delay, baseline, url}
+  } catch (e) { delayResults.value[name] = {delay: 0, baseline, url}; throw e }
 }
 async function testDelay(name: string) { await run('正在测试延迟', () => measureDelay(name), '延迟测试完成') }
 function testGroup(group: any) {
   void run('正在批量测速', async () => {
+    validateNodePrefs()
     const names = [...new Set<string>(group.all)]; let index = 0, completed = 0, failed = 0
-    batchSummary.value = ''
-    await Promise.all(Array.from({ length: Math.min(4, names.length) }, async () => {
-      while (index < names.length) {
-        const node = names[index++]
-        try { await measureDelay(node) } catch { failed++ }
-        completed++; progress.value = Math.round(completed / names.length * 100)
-      }
-    }))
-    batchSummary.value = `共 ${completed} 项：成功 ${completed - failed}，失败 ${failed}`
-    if (failed) throw new Error(batchSummary.value + '。失败项已标记，可单独重试。')
+    batchSummary.value = ''; batchActive.value = true; batchCancelled.value = false
+    try {
+      const workers = Math.min(8, Math.max(1, Number(nodePrefs.concurrency) || 4), names.length)
+      await Promise.all(Array.from({ length: workers }, async () => {
+        while (!batchCancelled.value && index < names.length) {
+          const node = names[index++]
+          try { await measureDelay(node) } catch { failed++ }
+          completed++; progress.value = Math.round(completed / names.length * 100)
+        }
+      }))
+      batchSummary.value = `共 ${completed} 项：成功 ${completed - failed}，失败 ${failed}` + (batchCancelled.value ? `，已取消剩余 ${names.length - completed} 项` : '')
+      if (batchCancelled.value || failed) throw new Error(batchSummary.value)
+    } finally { batchActive.value = false }
   }, '测速完成，全部成功')
+}
+function updateProviders(kind: string) {
+  void run('正在更新集合', async () => {
+    const entries = Object.entries(providers.value[kind]?.providers || {}).filter(([,p]:any) => p.vehicleType !== 'Compatible')
+    let failed = 0
+    for (const [id] of entries) {
+      const key = kind+':'+id; providerResults.value[key] = '更新中'
+      try { await rpc('providers.update',{id,type:kind}); providerResults.value[key] = '更新成功' }
+      catch(e:any) { failed++; providerResults.value[key] = '失败：'+e.message }
+    }
+    providers.value = await rpc('providers')
+    if (failed) throw new Error(`${entries.length - failed} 个集合更新成功，${failed} 个失败，详见各项结果`)
+  }, '集合更新完成')
 }
 function saveSettings() {
   if (!settings.value) return
@@ -303,6 +357,7 @@ onUnmounted(() => { clearInterval(timer); clearTimeout(toastTimer); window.remov
     <main class="main-content">
       <header class="page-header"><h2>{{ current.label }}</h2><span :class="['connection-pill', { offline: !connected }]"><i />{{ connected ? '管理服务已连接' : error ? '管理服务未连接' : '正在连接管理服务' }}</span></header>
 
+      <div v-if="busy && status?.running" class="banner"><span>{{ busy }}</span><button class="button button-secondary button-small" :disabled="stopPending" @click="stopDuringTask">停止代理并取消配置处理</button></div>
       <div v-if="settingsDirty || devicesDirty" class="banner draft-banner" role="status"><span>有未保存修改（{{ [settingsDirty ? '网络 / 规则' : '', devicesDirty ? '设备' : ''].filter(Boolean).join('、') }}）。切换标签会保留草稿，关闭页面前请保存。</span><button class="text-button" :disabled="!!busy" @click="discardDrafts">放弃修改</button></div>
       <div v-if="status?.dev" class="banner"><Icon name="info" />本地开发预览：不修改本机路由或防火墙，路由器接管功能以实机验证为准。</div>
       <div v-if="error" class="banner danger"><Icon name="info" /><span>{{ error }}</span><button class="text-button" @click="run('正在重新连接', loadState)">重试</button></div>
@@ -336,6 +391,9 @@ onUnmounted(() => { clearInterval(timer); clearTimeout(toastTimer); window.remov
       </template>
 
       <template v-else-if="page === 'proxies'">
+        <details class="card"><summary>测速与切换设置</summary><div class="form-grid"><label>测速地址<input v-model="nodePrefs.url" :disabled="!!busy" type="url" /></label><label>超时（毫秒）<input v-model.number="nodePrefs.timeout" :disabled="!!busy" type="number" min="1000" max="15000" /></label><label>测速并发<input v-model.number="nodePrefs.concurrency" :disabled="!!busy" type="number" min="1" max="8" /></label><label class="check-setting"><input v-model="nodePrefs.closeConnections" :disabled="!!busy" type="checkbox" /><span>切换线路后关闭全部旧连接<small>现有下载、视频等连接会重新建立，默认关闭。</small></span></label></div><button class="button button-secondary button-small" :disabled="!!busy" @click="saveNodePrefs">保存操作偏好</button><p class="field-help">保存在当前浏览器。测量延迟，不是下载带宽；更换测试地址后重新测速。内核历史没有测试地址标记时，不用于自定义地址结果。</p></details>
+        <div v-if="batchActive" class="banner"><span>{{ batchCancelled ? '正在结束已发出的测速请求…' : '批量测速进行中' }}</span><button class="button button-secondary button-small" :disabled="batchCancelled" @click="batchCancelled=true">取消剩余测速</button><small>已发出的请求等待完成或超时，不再发送后续节点。</small></div>
+
         <div class="toolbar"><div class="search-input"><Icon name="search" :size="17" /><input v-model="search" placeholder="搜索代理组或节点" aria-label="搜索代理" /></div><select v-model="nodeSort" aria-label="节点排序"><option value="default">订阅顺序</option><option value="delay">延迟从低到高</option><option value="name">按名称排序</option></select><select v-model="nodeFilter" aria-label="节点筛选"><option value="all">全部节点</option><option value="favorites">仅收藏</option><option value="available">隐藏测速超时</option></select><span class="muted">收藏保存在当前浏览器</span></div>
         <section class="card"><div class="section-heading"><div><h3>{{ canUseNodes ? '内核实时节点' : '配置预览' }}</h3><p>{{ canUseNodes ? '节点选择、代理组与延迟测试；测速结果来自 mihomo。' : '服务停止时可浏览已保存配置（含 YAML 覆写）。测速和切换线路需要内核运行。' }}</p></div><button class="button button-secondary button-small" :disabled="!!busy" @click="groupsReadAt = 0; run('正在读取节点', refreshGroups)">刷新节点</button></div><p v-if="proxySource === 'config'" class="field-help">这里只展示配置中明确列出的成员；集合加载、筛选和自动选择的最终结果以内核运行为准，不代表当前生效线路。</p><p v-if="previewProviders.length" class="field-help">代理集合：{{ previewProviders.join('、') }}。下方缓存仅供预览，最终成员以内核运行为准。</p><div class="button-row"><button class="button button-secondary button-small" @click="ruleTab = 'custom'; navigate('rules')">域名 / IP 分流</button><button class="button button-secondary button-small" @click="navigate('devices')">按设备分流</button></div></section>
         <p v-if="batchSummary" class="banner" role="status">{{ batchSummary }}</p>
@@ -348,7 +406,8 @@ onUnmounted(() => { clearInterval(timer); clearTimeout(toastTimer); window.remov
         <div class="tabs"><button v-for="tab in [['active','生效规则'],['custom','自定义分流'],['providers','规则与代理集合']]" :key="tab[0]" :class="{ active: ruleTab === tab[0] }" @click="ruleTab = tab[0]; refreshPage().catch(e => toast(e.message,'error'))">{{ tab[1] }}</button></div>
         <template v-if="ruleTab === 'active'"><div class="toolbar"><div class="search-input"><Icon name="search" :size="17" /><input v-model="search" placeholder="搜索规则或目标策略" /></div><span class="muted">{{ filteredRules.length }} 条规则</span></div><div class="card table-wrap"><table><thead><tr><th>类型</th><th>匹配内容</th><th>目标策略</th></tr></thead><tbody><tr v-for="(rule,i) in filteredRules.slice(0,500)" :key="i"><td><span class="tag">{{ rule.type }}</span></td><td class="mono">{{ rule.payload || '全部流量' }}</td><td>{{ rule.proxy }}</td></tr></tbody></table><p v-if="!rules.length" class="table-empty">代理运行后显示生效规则。</p><p v-if="filteredRules.length > 500" class="table-empty">显示前 500 条，请使用搜索缩小范围。</p></div></template>
         <section v-if="ruleTab === 'custom'" class="card"><div class="section-heading"><div><h3>自定义分流</h3><p>设备规则优先，其次是直连列表、代理列表、自定义规则和订阅规则。</p></div><button class="button button-primary" :disabled="!!busy" @click="saveSettings">保存并应用</button></div><div class="form-grid"><label>直连域名<textarea v-model="ruleForm.directDomains" rows="7" placeholder="每行一个域名，包含其子域名" /></label><label>代理域名<textarea v-model="ruleForm.proxyDomains" rows="7" placeholder="每行一个域名" /></label><label>直连 IP / CIDR<textarea v-model="ruleForm.directCidrs" rows="5" placeholder="例如 192.0.2.0/24" /></label><label>代理 IP / CIDR<textarea v-model="ruleForm.proxyCidrs" rows="5" placeholder="每行一条 CIDR" /></label></div><label>自定义 mihomo 规则<textarea v-model="ruleForm.customRules" rows="6" class="code-editor" placeholder="DOMAIN-SUFFIX,example.com,策略组名称" /></label><p class="field-help">代理列表使用设置中的默认策略组；配置更新会保留这些自定义内容。</p></section>
-        <div v-if="ruleTab === 'providers'" class="provider-grid"><section v-for="kind in ['proxies','rules']" :key="kind" class="card"><div class="section-heading"><h3>{{ kind === 'proxies' ? '代理集合' : '规则集合' }}</h3></div><div v-for="(provider,name) in (providers[kind]?.providers || {})" :key="name" class="provider-row"><div><strong>{{ name }}</strong><small>{{ provider.vehicleType || provider.type }} · {{ date(provider.updatedAt) }}</small></div><button class="icon-button" title="更新集合" :disabled="!!busy || !status?.running" @click="run('正在更新集合', () => rpc('providers.update',{ id:name,type:kind }))"><Icon name="refresh" :size="17" /></button></div><p v-if="!Object.keys(providers[kind]?.providers || {}).length" class="muted">{{ status?.running ? '当前配置没有可显示的集合。' : '代理已停止，启动后查看实时集合状态。' }}</p></section></div>
+        <section v-if="ruleTab === 'providers' && settings" class="card"><div class="section-heading"><div><h3>自动更新计划</h3><p>在线集合与 GEO 资源由 mihomo 在运行期间更新。</p></div><button class="button button-primary" :disabled="!!busy" @click="saveSettings">保存更新计划</button></div><div class="form-grid"><label>在线集合周期（小时）<input v-model.number="settings.providerUpdateHours" type="number" min="0" max="720" /></label><label>GEO 自动更新<select v-model="settings.geoAutoUpdate" aria-label="GEO 自动更新"><option :value="null">沿用配置</option><option :value="true">开启</option><option :value="false">关闭</option></select></label><label>GEO 周期（小时）<input v-model.number="settings.geoUpdateHours" type="number" min="0" max="720" /></label></div><p class="field-help">0 表示沿用 YAML；填写 1–720 覆盖周期。集合周期仅覆盖 HTTP 规则/代理集合，不改变节点健康检查频率。保存会一并应用设置草稿，运行中会短暂重启代理。GEO 周期本身不启用自动更新；不会修改原始订阅文件。</p></section>
+        <div v-if="ruleTab === 'providers'" class="provider-grid"><section v-for="kind in ['proxies','rules']" :key="kind" class="card"><div class="section-heading"><h3>{{ kind === 'proxies' ? '代理集合' : '规则集合' }}</h3><button class="button button-secondary button-small" :disabled="!!busy || !status?.running" @click="updateProviders(kind)">更新全部</button></div><div v-for="(provider,name) in (providers[kind]?.providers || {})" :key="name" class="provider-row"><div><strong>{{ name }}</strong><small>{{ provider.vehicleType || provider.type }} · {{ date(provider.updatedAt) }}</small><small v-if="providerResults[kind+':'+name]">{{ providerResults[kind+':'+name] }}</small></div><button class="icon-button" title="更新集合" :disabled="!!busy || !status?.running" @click="run('正在更新集合', () => rpc('providers.update',{ id:name,type:kind }))"><Icon name="refresh" :size="17" /></button></div><p v-if="!Object.keys(providers[kind]?.providers || {}).length" class="muted">{{ status?.running ? '当前配置没有可显示的集合。' : '代理已停止，启动后查看实时集合状态。' }}</p></section></div>
       </template>
 
       <template v-else-if="page === 'connections'">

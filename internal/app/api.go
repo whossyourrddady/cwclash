@@ -85,6 +85,9 @@ func (a *App) dispatch(ctx context.Context, action string, p json.RawMessage) (a
 		copy := *j
 		return copy, nil
 	case "service.start", "service.stop", "service.restart", "service.nat":
+		if action == "service.stop" {
+			a.cancelProfileTasks()
+		}
 		return a.newJob(action, func() (any, error) {
 			a.op.Lock()
 			defer a.op.Unlock()
@@ -164,8 +167,6 @@ func (a *App) dispatch(ctx context.Context, action string, p json.RawMessage) (a
 		}), nil
 	case "profiles.save":
 		return a.newJob(action, func() (any, error) {
-			a.op.Lock()
-			defer a.op.Unlock()
 			return a.saveProfile(a.operationContext(), Profile{ID: q.ID, Name: q.Name, URL: q.URL, UserAgent: q.UserAgent, UpdateHours: q.UpdateHours}, q.Content)
 		}), nil
 	case "profiles.read":
@@ -190,8 +191,6 @@ func (a *App) dispatch(ctx context.Context, action string, p json.RawMessage) (a
 		}), nil
 	case "profiles.update":
 		return a.newJob(action, func() (any, error) {
-			a.op.Lock()
-			defer a.op.Unlock()
 			return nil, a.updateProfile(a.operationContext(), q.ID)
 		}), nil
 	case "profiles.delete":

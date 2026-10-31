@@ -2,7 +2,14 @@
 
 面向 GT-AX6000、带 ASUS GO / Koolshare 软件中心的 ASUSWRT-Merlin 独立插件。以 mihomo 为代理内核，提供中文配置、订阅、代理组、规则、连接、DNS、设备分流、内核更新回退和备份管理。
 
-## 当前交付：0.3.6 USB 完整版
+## 当前交付：0.3.7 USB 完整版
+
+0.3.7 对照固定提交的 FlClash 源码，补齐测速地址/超时/并发设置、取消剩余测速、切换线路后可选关闭旧连接、集合批量更新逐项结果，以及规则与代理集合/GEO 的自动更新计划。更新计划在「规则 → 规则与代理集合」，默认沿用原 YAML，仅在 mihomo 运行时更新；节点偏好保存在当前浏览器。
+
+修复慢订阅下载/检查阻塞停止操作、下载期间删除配置又被旧结果重建、编辑配置丢失订阅额度、旧手动延迟覆盖新内核历史和分块上传提前提示成功。下载和验证不再占用服务操作锁；停止操作取消这些任务，临时检查内核串行运行以限制额外内存占用。保存前重新核对配置/设置/设备/内核，发现并发修改会拒绝覆盖并提示重试。
+
+此次是常用行为与缺陷对齐，**仍未完整实现 FlClash**；逐文件依据、剩余差距和验证边界见 [源码功能对照](docs/FLCLASH-PARITY.md)。
+
 
 0.3.6 修复批量测速失败被忽略、停机残留生效规则、保存备用配置重启当前代理、订阅失败频繁重试四项问题。批量测速显示成功/失败数量，单项可重试；备用配置和内容未变的当前配置保存不重启内核。订阅失败按 5/10/20/40/80/120 分钟退避，状态持久化，配置页显示最近尝试、失败原因及下次更新/重试时间。
 
@@ -18,9 +25,9 @@ Go 全包测试、vet 和模块加载/临时链清理模拟通过；仍待 GT-AX
 
 0.3.2 修复 0.3.1 版本文件 CRLF 导致安装器误报“管理程序无法在当前固件运行”。构建统一写入 LF，审计严格检查原始字节；安装日志分别报告启动失败和版本不匹配。0.3.1 此处失败发生在修改现有安装之前，直接使用新版完整包重试即可。
 
-[下载 USB 安装包](https://github.com/whossyourrddady/cwclash/releases/download/v0.3.6/cwclash_hnd_v8_usb_0.3.6.tar.gz) · [版本说明、源码与校验文件](https://github.com/whossyourrddady/cwclash/releases/tag/v0.3.6)。这是私人仓库，需要使用有权限的 GitHub 账号访问。
+[下载 USB 安装包](https://github.com/whossyourrddady/cwclash/releases/download/v0.3.7/cwclash_hnd_v8_usb_0.3.7.tar.gz) · [版本说明、源码与校验文件](https://github.com/whossyourrddady/cwclash/releases/tag/v0.3.7)。这是私人仓库，需要使用有权限的 GitHub 账号访问。
 
-使用官方 USB2JFFS 将健康的 EXT4 U 盘挂载到 `/jffs`，再通过软件中心离线安装 **`cwclash_hnd_v8_usb_0.3.6.tar.gz`**。一份包包含管理端、界面和官方 [mihomo v1.19.33](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.33) Linux ARM64 内核，无需先装引导包。
+使用官方 USB2JFFS 将健康的 EXT4 U 盘挂载到 `/jffs`，再通过软件中心离线安装 **`cwclash_hnd_v8_usb_0.3.7.tar.gz`**。一份包包含管理端、界面和官方 [mihomo v1.19.33](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.33) Linux ARM64 内核，无需先装引导包。
 
 - 包大小约 25.4 MB，持久文件约 58.5 MiB；安装器额外保留至少 128 MiB，供更新和回退使用。规则、GeoIP、配置和缓存还会继续占用 U 盘空间。
 - 安装前核对 `/jffs`、软件中心和插件目标目录确实位于同一块可写 USB EXT4 分区；条件不符时拒绝安装。

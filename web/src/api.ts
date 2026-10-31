@@ -7,6 +7,7 @@ export type Settings = {
   dnsMode: 'fake-ip' | 'redir-host'; ipv6: 'auto' | 'proxy' | 'block'; blockQuic: boolean; defaultGroup: string
   directDomains: string[]; proxyDomains: string[]; directCidrs: string[]; proxyCidrs: string[]; customRules: string[]
   overrideYaml: string; mode: 'rule' | 'global' | 'direct'; logLevel: string
+  geoAutoUpdate?: boolean | null; geoUpdateHours?: number; providerUpdateHours?: number
 }
 export type Kernel = { version: string; file: string; sha256: string; previous?: Kernel }
 export type State = { schema: number; enabled: boolean; activeProfile: string; profiles: Profile[]; devices: DevicePolicy[]; settings: Settings; kernel: Kernel }
@@ -52,14 +53,20 @@ export async function waitJob(job: { jobId: string }, onMessage?: (message: stri
     const state = await rpc<Job>('jobs.get', { id: job.jobId })
     onMessage?.(state.message)
     if (state.status === 'error') throw new Error(state.message)
-    if (state.status === 'done') return state.result
+    if (state.status === 'done') {
+      const next = state.result as {jobId?: string} | null
+      if (next && typeof next.jobId === 'string') { job = {jobId: next.jobId}; continue }
+      return state.result
+    }
     await new Promise(resolve => setTimeout(resolve, 700))
   }
   throw new Error('操作仍在运行，请稍后查看状态；不要重复提交')
 }
 
 export async function actionJob(action: string, payload: unknown = {}, onMessage?: (message: string) => void): Promise<any> {
-  return waitJob(await rpc<{ jobId: string }>(action, payload), onMessage)
+  const result = await rpc<any>(action, payload)
+  // Large requests use uploadFile, which already waits for the final job.
+  return result && typeof result.jobId === 'string' ? waitJob(result, onMessage) : result
 }
 
 export async function uploadFile(kind: string, file: File, metadata: unknown, progress: (value: number) => void): Promise<any> {

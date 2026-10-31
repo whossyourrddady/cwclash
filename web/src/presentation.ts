@@ -16,3 +16,14 @@ export function orderNodes(names: string[], mode: string, delay: (name: string) 
   return [...names].sort((a, b) => mode === 'name' ? a.localeCompare(b, 'zh-CN') : mode === 'delay'
     ? ((delay(a) || Infinity) - (delay(b) || Infinity)) : 0)
 }
+
+export type MeasuredDelay = { delay: number; baseline: string; url: string }
+export const defaultTestURL = 'https://www.gstatic.com/generate_204'
+export function historyKey(history: any[] | undefined): string { return JSON.stringify(history?.at(-1) ?? null) }
+export function currentDelay(manual: MeasuredDelay | undefined, history: any[] | undefined, url: string): number | null {
+  if (manual?.url === url && manual.baseline === historyKey(history)) return manual.delay
+  // Core history doesn't identify its test URL; don't label it as a custom-URL result.
+  if (url !== defaultTestURL) return null
+  const value = history?.at(-1)?.delay
+  return typeof value === 'number' ? value : null
+}

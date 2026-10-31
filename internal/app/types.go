@@ -52,24 +52,27 @@ type DevicePolicy struct {
 }
 
 type Settings struct {
-	LANInterface   string   `json:"lanInterface"`
-	MixedPort      int      `json:"mixedPort"`
-	RedirPort      int      `json:"redirPort"`
-	TProxyPort     int      `json:"tproxyPort"`
-	DNSPort        int      `json:"dnsPort"`
-	ControllerPort int      `json:"controllerPort"`
-	DNSMode        string   `json:"dnsMode"`
-	IPv6           string   `json:"ipv6"`
-	BlockQUIC      bool     `json:"blockQuic"`
-	DefaultGroup   string   `json:"defaultGroup"`
-	DirectDomains  []string `json:"directDomains"`
-	ProxyDomains   []string `json:"proxyDomains"`
-	DirectCIDRs    []string `json:"directCidrs"`
-	ProxyCIDRs     []string `json:"proxyCidrs"`
-	CustomRules    []string `json:"customRules"`
-	OverrideYAML   string   `json:"overrideYaml"`
-	Mode           string   `json:"mode"`
-	LogLevel       string   `json:"logLevel"`
+	LANInterface        string   `json:"lanInterface"`
+	MixedPort           int      `json:"mixedPort"`
+	RedirPort           int      `json:"redirPort"`
+	TProxyPort          int      `json:"tproxyPort"`
+	DNSPort             int      `json:"dnsPort"`
+	ControllerPort      int      `json:"controllerPort"`
+	DNSMode             string   `json:"dnsMode"`
+	IPv6                string   `json:"ipv6"`
+	BlockQUIC           bool     `json:"blockQuic"`
+	DefaultGroup        string   `json:"defaultGroup"`
+	DirectDomains       []string `json:"directDomains"`
+	ProxyDomains        []string `json:"proxyDomains"`
+	DirectCIDRs         []string `json:"directCidrs"`
+	ProxyCIDRs          []string `json:"proxyCidrs"`
+	CustomRules         []string `json:"customRules"`
+	OverrideYAML        string   `json:"overrideYaml"`
+	Mode                string   `json:"mode"`
+	LogLevel            string   `json:"logLevel"`
+	GeoAutoUpdate       *bool    `json:"geoAutoUpdate,omitempty"`
+	GeoUpdateHours      int      `json:"geoUpdateHours"`
+	ProviderUpdateHours int      `json:"providerUpdateHours"`
 }
 
 type State struct {
@@ -132,6 +135,8 @@ type App struct {
 	op              sync.Mutex
 	state           State
 	jobs            map[string]*Job
+	profileTasks    map[string]context.CancelFunc
+	validationSlot  chan struct{}
 	logs            []LogEntry
 	dnsQueries      []DNSQuery
 	sequence        uint64
@@ -238,6 +243,9 @@ func validID(v string) bool {
 }
 
 func validateSettings(s Settings) error {
+	if s.GeoUpdateHours < 0 || s.GeoUpdateHours > 720 || s.ProviderUpdateHours < 0 || s.ProviderUpdateHours > 720 {
+		return fmt.Errorf("更新周期需为 0–720 小时；0 表示沿用配置")
+	}
 	if !validID(s.LANInterface) || len(s.LANInterface) > 15 {
 		return fmt.Errorf("LAN 网桥名称无效")
 	}

@@ -1,10 +1,12 @@
 # FlClash 功能对照（2026-10-31）
 
-**结论：长城 Clash 0.3.6 尚未与 FlClash 完全对齐。** 常用代理管理已有实现；JavaScript 覆写、WebDAV、TUN、可视化节点/代理组编辑等仍有差距。桌面和 Android 专属能力不能直接搬到路由器。
+**结论：长城 Clash 0.3.7 尚未与 FlClash 完全对齐。** 常用代理管理已有实现；JavaScript 覆写、WebDAV、TUN、可视化节点/代理组编辑等仍有差距。桌面和 Android 专属能力不能直接搬到路由器。
 
-对照依据为 [FlClash 当前中文 README](https://github.com/chen08209/FlClash/blob/main/README_zh_CN.md) 的公开功能项，以及本仓库实际页面、API 和配置处理代码。这里的“已实现”表示存在对应代码和操作入口，不等于所有固件/订阅/协议组合都经过验收；不是两个客户端的全量行为一致性测试。
+本轮实际读取 FlClash 源码，固定于 **`7fd417fb9a9a277c6a9339a8ac87f907df7c25f7`**（2026-10-24），不是只看 README。对照源包括 core/delay.go、core/profile_base.go、core/provider.go、core/geo.go、lib/models/profile.dart、lib/models/clash_config.dart、lib/manager/core_manager.dart，以及 providers/actions 下的 profiles、proxies、backup、scripts、geo_resource。
 
-| 功能 | 长城 Clash 0.3.6 | 实现位置与边界 |
+“已实现”表示有相应代码和入口，不等于不同固件、订阅、协议全部验收；本次按公开行为独立实现，没有把 FlClash 客户端或其修改版内核打包进插件。
+
+| 功能 | 长城 Clash 0.3.7 | 实现位置与边界 |
 | --- | --- | --- |
 | mihomo 内核 | 已实现 | 官方 Linux ARM64 内核，支持检查更新、离线导入和上一版回退；[upgrade.go](../internal/app/upgrade.go)、[core_storage.go](../internal/app/core_storage.go)。 |
 | 规则、全局、直连模式 | 已实现 | 概览切换，真实更新内核与本插件接管规则；[core.go](../internal/app/core.go)、[network.go](../internal/app/network.go)。 |
@@ -28,23 +30,34 @@
 | 主题与交互 | 按用户要求适配软件中心 | 0.3.1 使用固件顶部/左侧菜单，ASUSWRT / ROG / TUF / TS 皮肤和紧凑横向功能标签；不复制 Material You 动态取色或手机吸附面板。 |
 | 开机恢复 | 有路由器实现 | 通过软件中心 S98 / N98 / T98 钩子和持久启用状态恢复；还需 GT-AX6000 实机重启验收。 |
 
-## 仍需补齐的优先项
+## 源码发现与 0.3.7 修复
 
-1. 代理体验：节点与代理组可视化编辑（额度展示、排序与浏览器收藏已实现；0.3.6 增加批量测速失败统计、缓存预览和更新退避状态）。
-2. 配置能力：明确脚本接口及限制后实现 JavaScript 覆写；先完成兼容测试，再接受 FlClash 脚本。
-3. 数据管理：WebDAV 备份恢复和更完整的请求筛选。
-4. 网络模式：是否增加 TUN 需结合 GT-AX6000 的内核、驱动与网络恢复验收。当前 REDIRECT/TPROXY 仍是已实现方式。
+| FlClash 源码证据 | 本插件之前的差距 | 本次处理 |
+| --- | --- | --- |
+| [profiles.dart 更新后重新读取当前配置](https://github.com/chen08209/FlClash/blob/7fd417fb9a9a277c6a9339a8ac87f907df7c25f7/lib/providers/actions/profiles.dart#L138) | 慢下载持有服务操作锁；解除锁后需要处理删除/编辑冲突 | 网络与验证移出锁；保存前比对当前状态和原文件；已删除/并发修改时拒绝旧结果；停止会取消处理，失败不计为自动重试。临时检查内核串行执行。 |
+| [profile.dart 元数据合并](https://github.com/chen08209/FlClash/blob/7fd417fb9a9a277c6a9339a8ac87f907df7c25f7/lib/models/profile.dart) | 改名会丢失服务器返回的订阅额度 | 同一订阅地址保留服务端元数据，忽略客户端伪造额度；更换来源会清除旧额度；重新下载以新响应头为准。 |
+| [proxies.dart 可取消任务与测试地址](https://github.com/chen08209/FlClash/blob/7fd417fb9a9a277c6a9339a8ac87f907df7c25f7/lib/providers/actions/proxies.dart) / [delay.go 有界工作池](https://github.com/chen08209/FlClash/blob/7fd417fb9a9a277c6a9339a8ac87f907df7c25f7/core/delay.go) | 测试参数写死、无法取消、旧结果永久覆盖 | 界面提供 HTTP(S) 地址、1–15 秒超时、1–8 并发（默认4）；可取消尚未派发项，已开始项等返回或超时；结果按测试地址隔离，新的内核历史替代旧手动结果。自定义地址不冒用无地址标记的内核历史。测速仍是延迟，不是带宽。 |
+| [proxies.dart 切换后连接处理](https://github.com/chen08209/FlClash/blob/7fd417fb9a9a277c6a9339a8ac87f907df7c25f7/lib/providers/actions/proxies.dart#L178) | 切线路后旧连接不变，用户可能误以为没切换 | 默认保留旧连接并明确提示；增加可选关闭全部旧连接，提示会中断现有下载/视频。 |
+| [provider.go 外部集合更新](https://github.com/chen08209/FlClash/blob/7fd417fb9a9a277c6a9339a8ac87f907df7c25f7/core/provider.go) | 只有逐个集合更新，缺少批量结果 | 增加规则/代理集合批量更新和每项成功/失败，部分失败不会显示全成功。 |
+| [geo.go 周期管理](https://github.com/chen08209/FlClash/blob/7fd417fb9a9a277c6a9339a8ac87f907df7c25f7/core/geo.go) | 仅能写 YAML 配置周期 | 「规则 → 规则与代理集合」提供 HTTP 集合周期、GEO 自动更新和周期；默认沿用配置，保存会应用设置并在运行时重启。0 表示继承，1–720 小时表示覆盖。修改周期不改变集合缓存身份；本地/内嵌集合不受影响。 |
+| 本插件分块请求链路审查 | 上传完成任务还包含一个真正保存任务，前端会提前报成功 | 前端等待最终任务，最终保存失败向上传递；普通和分块请求均有回归测试。 |
 
-本轮完成软件中心界面整合和对照核查，没有把上面的缺项伪装成可用开关，也没有在路由器上自动切换网络模式。
+GEO/集合调度字段遵循 [mihomo 通用配置](https://wiki.metacubex.one/config/general/)；运行时集合操作通过 [mihomo REST API](https://wiki.metacubex.one/api/)。更新计划不是更新成功状态：当前没有 GEO 逐资源事件回调、失败诊断或下次执行倒计时，不能保证上游下载在每次定时触发时成功。
 
-## 验证状态
+## 仍未完成的差距
 
-既有本地验证包括 Go 检查、安装模拟、管理桥、Windows 原生 mihomo 协议及 USB 缓存检查。0.3.1 的界面使用真实 ASP、host.js、构建后的 Vue/CSS，在完全拦截网络的本地浏览器夹具中验证九页导航、哈希跳转、配置弹窗、表单、四种皮肤和外部样式隔离。外层固件菜单与 RPC 数据是测试替身，截图均标注示例数据，不是路由器实机截图。
+- **可视化节点/组编辑与分享链接导入**：FlClash 有节点类型表单、代理链及配置内节点操作；本插件目前通过 YAML 编辑/覆写，不能直接导入任意 ss://、vmess:// 等单节点链接。也未实现 FlClash 的 age 加密配置流程。
+- **按配置单独覆写、JavaScript**：[scripts.dart](https://github.com/chen08209/FlClash/blob/7fd417fb9a9a277c6a9339a8ac87f907df7c25f7/lib/providers/actions/scripts.dart) 将脚本关联配置。本插件仅有全局 YAML 覆写，无 JS 运行环境，不能声称兼容 FlClash 脚本。
+- **WebDAV 与备份兼容**：[backup.dart](https://github.com/chen08209/FlClash/blob/7fd417fb9a9a277c6a9339a8ac87f907df7c25f7/lib/providers/actions/backup.dart) 包含数据库快照及远端备份；本插件是自己的本地 ZIP 格式，未实现 WebDAV。
+- **GEO 逐资源管理、出口 IP/质量探测、请求事件分析**：没有完整对应入口或事件模型。当前集合结果、连接表、DNS 历史不能替代这些能力。
+- **TUN 与终端平台功能**：现在是 REDIRECT/TPROXY，tun.enable=false；桌面托盘、快捷键、Android 磁贴和按终端 App/进程分流不适用于当前路由器管理端。
 
-0.2.1 USB 识别修复以及 0.3.1 新界面仍待实际固件安装、菜单兼容、透明代理、重启和故障恢复验收。
+FlClash 使用其修改过的 mihomo 子模块及事件/回调；本插件使用官方 mihomo 二进制与 REST API。需要扩展内核事件接口的功能不能仅加按钮宣称完成。
 
-## 0.3.6 差距检查后的修复
+## 本轮验证边界
 
-已修复：批量测速失败被吞、停止后保留旧生效规则、保存非当前配置重启运行内核、订阅失败每分钟重试。增加持久退避状态、下次更新/重试展示、离线集合缓存预览和 DNS 缓存清理。
-
-仍有差距：规则/GEO 更新周期主要由 YAML 和 mihomo 管理，尚无统一计划编辑面板；测速参数未开放界面设置，测速是延迟而非带宽；可视化节点/组编辑、JS 覆写、WebDAV、TUN、自动恢复代理仍未实现。
+- Go 全包测试、vet、前端类型检查/生产构建、安装包逐文件与 ARM64/内核校验通过。
+- 新回归覆盖慢订阅期间停止、已删除配置不复活、并发设置修改不覆盖、额度保留/换源清除、排队检查取消、更新计划继承/覆盖/缓存身份，以及分块任务最终完成和失败传递。
+- Windows 原生 mihomo 4 项回归通过：配置保存重启边界、本地集合备份恢复、在线缓存恢复隔离、USB 目录与持久集合缓存。是本机回环测试，不是路由器透明代理实测。
+- 界面验证使用安装包实际 ASP/JS/CSS、拦截全部网络的虚拟固件和模拟 RPC；涵盖九页、四种皮肤、样式隔离及本次新操作。外层固件与数据为替身。
+- **GT-AX6000 真机安装、TPROXY、IPv6、USB 异常拔盘、重启和长期内存仍待验收**。没有把历史授权等同于本轮已获得实机访问。

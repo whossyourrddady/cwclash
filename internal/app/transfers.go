@@ -151,6 +151,17 @@ func (a *App) handleUpload(ctx context.Context, action string, p json.RawMessage
 				}
 				return a.dispatch(a.operationContext(), meta.Action, b)
 			}
+			if copy.Kind == "profile" {
+				var profile Profile
+				if err := json.Unmarshal(copy.Metadata, &profile); err != nil {
+					return nil, err
+				}
+				b, err := os.ReadFile(copy.Path)
+				if err != nil {
+					return nil, err
+				}
+				return a.saveProfile(a.operationContext(), profile, string(b))
+			}
 			a.op.Lock()
 			defer a.op.Unlock()
 			switch copy.Kind {
@@ -169,16 +180,6 @@ func (a *App) handleUpload(ctx context.Context, action string, p json.RawMessage
 				s := a.snapshot()
 				s.Settings = settings
 				return nil, a.applyState(s)
-			case "profile":
-				var profile Profile
-				if err := json.Unmarshal(copy.Metadata, &profile); err != nil {
-					return nil, err
-				}
-				b, err := os.ReadFile(copy.Path)
-				if err != nil {
-					return nil, err
-				}
-				return a.saveProfile(a.operationContext(), profile, string(b))
 			case "kernel":
 				return nil, a.installCoreArchive(a.operationContext(), copy.Path, "")
 			case "backup":

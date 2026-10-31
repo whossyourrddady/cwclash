@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -225,6 +227,24 @@ func (a *App) compileConfig(s State, raw []byte, controllerPort int) ([]byte, er
 	if err = a.normalizeProviderPaths(doc); err != nil {
 		return nil, err
 	}
+	// Apply schedules after cache identity calculation: changing the global
+	// update frequency must not invalidate an otherwise identical provider.
+	if s.Settings.GeoAutoUpdate != nil {
+		doc["geo-auto-update"] = *s.Settings.GeoAutoUpdate
+	}
+	if s.Settings.GeoUpdateHours > 0 {
+		doc["geo-update-interval"] = s.Settings.GeoUpdateHours
+	}
+	if s.Settings.ProviderUpdateHours > 0 {
+		for _, kind := range []string{"proxy-providers", "rule-providers"} {
+			for _, value := range asMap(doc[kind]) {
+				p := asMap(value)
+				if p["type"] == "http" {
+					p["interval"] = s.Settings.ProviderUpdateHours * 3600
+				}
+			}
+		}
+	}
 	return yaml.Marshal(doc)
 }
 
@@ -367,6 +387,23 @@ func (a *App) saveProfile(ctx context.Context, profile Profile, content string) 
 	if !validID(profile.ID) {
 		return profile, fmt.Errorf("配置标识无效")
 	}
+	taskCtx, finish, err := a.beginProfileTask(ctx, profile.ID)
+	if err != nil {
+		return profile, err
+	}
+	defer finish()
+	ctx = taskCtx
+	base := findProfile(s, profile.ID)
+	// Only the server-owned old metadata or a new HTTP response may supply quota.
+	profile.SubscriptionInfo = ""
+	if base != nil && base.URL == profile.URL {
+		profile.SubscriptionInfo = base.SubscriptionInfo
+	}
+	path := filepath.Join(a.root, "profiles", profile.ID+".yaml")
+	original, originalErr := os.ReadFile(path)
+	if originalErr != nil && !os.IsNotExist(originalErr) {
+		return profile, originalErr
+	}
 	profile.Name = strings.TrimSpace(profile.Name)
 	if profile.Name == "" || len(profile.Name) > 100 {
 		return profile, fmt.Errorf("配置名称需为 1–100 个字符")
@@ -395,14 +432,30 @@ func (a *App) saveProfile(ctx context.Context, profile Profile, content string) 
 		return profile, err
 	}
 	if err = a.validateConfig(ctx, compiled, s.Kernel); err != nil {
+		if ctx.Err() != nil {
+			return profile, ctx.Err()
+		}
 		return profile, err
 	}
-	path := filepath.Join(a.root, "profiles", profile.ID+".yaml")
+	// Network and validation work never hold the service operation lock.
+	a.op.Lock()
+	defer a.op.Unlock()
+	if ctx.Err() != nil {
+		return profile, ctx.Err()
+	}
+	current := a.snapshot()
+	if !reflect.DeepEqual(base, findProfile(current, profile.ID)) || !reflect.DeepEqual(s.Settings, current.Settings) || !reflect.DeepEqual(s.Devices, current.Devices) || !reflect.DeepEqual(s.Kernel, current.Kernel) {
+		return profile, fmt.Errorf("处理期间配置、设备或内核已更改，未覆盖新状态，请重试")
+	}
+	s = current
 	old, oldErr := os.ReadFile(path)
 	if oldErr != nil && !os.IsNotExist(oldErr) {
 		return profile, oldErr
 	}
-	previous := a.snapshot()
+	if !bytes.Equal(original, old) || os.IsNotExist(originalErr) != os.IsNotExist(oldErr) {
+		return profile, fmt.Errorf("处理期间配置文件已更改，未覆盖新内容")
+	}
+	previous := s
 	restart := a.isRunning() && s.ActiveProfile == profile.ID && !bytes.Equal(old, []byte(content))
 	if restart {
 		if err = a.stopService(false); err != nil {
@@ -460,7 +513,7 @@ func (a *App) saveProfile(ctx context.Context, profile Profile, content string) 
 		return rollback(err)
 	}
 	if restart {
-		if err = a.startService(false); err != nil {
+		if err = a.startPreparedService(false, compiled); err != nil {
 			return rollback(err)
 		}
 	}
@@ -480,8 +533,13 @@ func (a *App) updateProfile(ctx context.Context, id string) error {
 		return fmt.Errorf("本地配置没有订阅地址")
 	}
 	_, err := a.saveProfile(ctx, *p, "")
-	if err != nil {
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, errProfileBusy) {
+		a.op.Lock()
+		defer a.op.Unlock()
 		next := a.snapshot()
+		if !reflect.DeepEqual(p, findProfile(next, id)) {
+			return err
+		}
 		for i := range next.Profiles {
 			if next.Profiles[i].ID != id {
 				continue
