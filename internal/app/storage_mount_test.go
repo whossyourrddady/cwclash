@@ -71,6 +71,50 @@ func TestUSBProductionRejectsDestinationBeforeCreatingFiles(t *testing.T) {
 	}
 }
 
+func TestUSBDeviceSupportsModernAndLegacySysfs(t *testing.T) {
+	modern := "/sys/devices/platform/xhci/usb1/1-1/1-1:1.0/host0/target0:0:0/0:0:0:0/block/sda/sda1"
+	legacy := "/sys/block/sda/sda1"
+	hardware := "/sys/devices/platform/xhci/usb1/1-1/1-1:1.0/host0/target0:0:0/0:0:0:0"
+	for _, tc := range []struct {
+		name, source string
+		links        map[string]string
+		files        map[string]string
+		accepted     bool
+	}{
+		{"modern ancestry", "/dev/sda1", map[string]string{"/sys/dev/block/8:1": modern}, map[string]string{modern + "/dev": "8:1\n"}, true},
+		{"legacy partition parent device", "/dev/sda1", map[string]string{"/sys/dev/block/8:1": legacy, "/sys/block/sda/device": hardware}, map[string]string{legacy + "/dev": "8:1\n", legacy + "/partition": "1\n"}, true},
+		{"class block without dev index", "/dev/sda1", map[string]string{"/sys/class/block/sda1": modern}, map[string]string{modern + "/dev": "8:1\n"}, true},
+		{"legacy block without either index", "/dev/sda1", map[string]string{legacy: legacy, "/sys/block/sda/device": hardware}, map[string]string{legacy + "/dev": "8:1\n", legacy + "/partition": "1\n"}, true},
+		{"legacy whole device", "/dev/sda", map[string]string{"/sys/block/sda": "/sys/block/sda", "/sys/block/sda/device": hardware}, map[string]string{"/sys/block/sda/dev": "8:1\n"}, true},
+		{"non USB hardware", "/dev/sda1", map[string]string{"/sys/dev/block/8:1": legacy, "/sys/block/sda/device": "/sys/devices/pci0000/ata1/host0/target0:0:0/0:0:0:0"}, map[string]string{legacy + "/dev": "8:1\n", legacy + "/partition": "1\n"}, false},
+		{"wrong block identity", "/dev/sda1", map[string]string{"/sys/class/block/sda1": modern}, map[string]string{modern + "/dev": "8:17\n"}, false},
+		{"missing dev attribute", "/dev/sda1", map[string]string{"/sys/dev/block/8:1": modern}, nil, false},
+		{"missing sysfs", "/dev/sda1", nil, nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resolve := func(p string) (string, error) {
+				if value, ok := tc.links[p]; ok {
+					return value, nil
+				}
+				return "", os.ErrNotExist
+			}
+			read := func(p string) ([]byte, error) {
+				if value, ok := tc.files[p]; ok {
+					return []byte(value), nil
+				}
+				return nil, os.ErrNotExist
+			}
+			err := verifyUSBDevice(storageMount{Device: "8:1", Source: tc.source}, resolve, read)
+			if (err == nil) != tc.accepted {
+				t.Fatalf("accepted=%v, error=%v", tc.accepted, err)
+			}
+			if err != nil && (!strings.Contains(err.Error(), "8:1") || !strings.Contains(err.Error(), tc.source)) {
+				t.Fatal("rejection lacks device diagnostics")
+			}
+		})
+	}
+}
+
 func TestUSBLayoutKeepsCacheAndUsesVerifiedRawCore(t *testing.T) {
 	base := t.TempDir()
 	root := filepath.Join(base, "usb")

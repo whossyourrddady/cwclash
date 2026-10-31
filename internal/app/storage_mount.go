@@ -18,8 +18,8 @@ const (
 )
 
 type storageMount struct {
-	ID                           int
-	Device, Point, Kind, Options string
+	ID                                   int
+	Device, Point, Kind, Options, Source string
 }
 
 type usbStorage struct {
@@ -49,7 +49,7 @@ func parseStorageMounts(data string) ([]storageMount, error) {
 		if err != nil || id <= 0 {
 			return nil, fmt.Errorf("挂载编号无效")
 		}
-		mounts = append(mounts, storageMount{ID: id, Device: f[2], Point: path.Clean(decode.Replace(f[4])), Kind: f[separator+1], Options: f[5]})
+		mounts = append(mounts, storageMount{ID: id, Device: f[2], Point: path.Clean(decode.Replace(f[4])), Kind: f[separator+1], Options: f[5], Source: decode.Replace(f[separator+2])})
 	}
 	return mounts, nil
 }
@@ -143,9 +143,8 @@ func inspectUSBStorage(root string) (*usbStorage, error) {
 	if !regexp.MustCompile(`^[0-9]+:[0-9]+$`).MatchString(storage.JFFS.Device) {
 		return nil, fmt.Errorf("U 盘设备编号无效")
 	}
-	topology, err := filepath.EvalSymlinks(filepath.Join("/sys/dev/block", storage.JFFS.Device))
-	if err != nil || !usbTopology(topology) {
-		return nil, fmt.Errorf("/jffs 的实际设备未识别为 USB 存储，未写入内置存储")
+	if err = verifyUSBDevice(storage.JFFS, filepath.EvalSymlinks, os.ReadFile); err != nil {
+		return nil, err
 	}
 	return storage, nil
 }

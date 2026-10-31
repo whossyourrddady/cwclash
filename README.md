@@ -2,19 +2,21 @@
 
 面向 GT-AX6000、带 ASUS GO / Koolshare 软件中心的 ASUSWRT-Merlin 独立插件。以 mihomo 为代理内核，提供中文配置、订阅、代理组、规则、连接、DNS、设备分流、内核更新回退和备份管理。
 
-## 当前交付：0.2.0 USB 完整版
+## 当前交付：0.2.1 USB 完整版
 
-[下载 USB 安装包](https://github.com/whossyourrddady/cwclash/releases/download/v0.2.0/cwclash_hnd_v8_usb_0.2.0.tar.gz) · [版本说明、源码与校验文件](https://github.com/whossyourrddady/cwclash/releases/tag/v0.2.0)。这是私人仓库，需要使用有权限的 GitHub 账号访问。
+[下载 USB 安装包](https://github.com/whossyourrddady/cwclash/releases/download/v0.2.1/cwclash_hnd_v8_usb_0.2.1.tar.gz) · [版本说明、源码与校验文件](https://github.com/whossyourrddady/cwclash/releases/tag/v0.2.1)。这是私人仓库，需要使用有权限的 GitHub 账号访问。
 
-使用官方 USB2JFFS 将健康的 EXT4 U 盘挂载到 `/jffs`，再通过软件中心离线安装 **`cwclash_hnd_v8_usb_0.2.0.tar.gz`**。一份包包含管理端、界面和官方 [mihomo v1.19.33](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.33) Linux ARM64 内核，无需先装引导包。
+使用官方 USB2JFFS 将健康的 EXT4 U 盘挂载到 `/jffs`，再通过软件中心离线安装 **`cwclash_hnd_v8_usb_0.2.1.tar.gz`**。一份包包含管理端、界面和官方 [mihomo v1.19.33](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.33) Linux ARM64 内核，无需先装引导包。
 
-- 包大小约 25.43 MB，持久文件约 58.5 MiB；安装器额外保留至少 128 MiB，供更新和回退使用。规则、GeoIP、配置和缓存还会继续占用 U 盘空间。
+- 包大小约 25.40 MB，持久文件约 58.5 MiB；安装器额外保留至少 128 MiB，供更新和回退使用。规则、GeoIP、配置和缓存还会继续占用 U 盘空间。
 - 安装前核对 `/jffs`、软件中心和插件目标目录确实位于同一块可写 USB EXT4 分区；条件不符时拒绝安装。
 - 内核原始文件保存在 U 盘，启动时按块校验并复制到内存执行，省去 XZ 解压和整文件内存读取；升级保留当前版本和一个上一版本。
 - 配置、订阅、手动线路选择、规则与 GeoIP 缓存保存在 U 盘；运行程序、PID、控制令牌和网络所有权记录放在 `/tmp/cwclash-run`。
 - 挂载变化时停止代理接管；另有依靠内存程序和挂载记录工作的独立清理任务。异常硬件造成的 I/O 卡顿和真实拔盘恢复仍需实机验证。
 
-适配目标为 GT-AX6000 / ARM64、固件 3004.388.4、软件中心 1.9.57。新 U 盘尚未接入，**0.2.0 尚未在路由器安装验收**。本地已完成安装模拟、实际管理接口往返、挂载校验和 Windows 原生 mihomo 转发/缓存检查；这些结果不能代替路由器上的透明代理、开关机与 IPv6 验证。操作步骤见 [安装说明](docs/INSTALL.md)。
+适配目标为 GT-AX6000 / ARM64、固件 3004.388.4、软件中心 1.9.57。0.2.0 实机日志显示 EXT4 挂载与目标目录检查通过，但在 USB 设备识别处停止；**0.2.1 修复此项兼容检查，尚待实机重试验收**。本地已完成安装模拟、实际管理接口往返、挂载校验和 Windows 原生 mihomo 转发/缓存检查；这些结果不能代替路由器上的透明代理、开关机与 IPv6 验证。操作步骤见 [安装说明](docs/INSTALL.md)。
+
+0.2.1 支持 USB 硬件祖先直接出现在块设备路径中的布局，也支持 `/sys/block` 下通过整盘 `device` 链接访问硬件的旧布局；缺少 `/sys/dev/block` 索引时，改查 class/block 或 block 入口并核验相同的设备编号。相关内核接口见 [sysfs-dev](https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-dev)。
 
 ## 使用
 
