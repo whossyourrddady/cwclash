@@ -1,6 +1,6 @@
 # mihomo 对应源码与构建材料
 
-长城 Clash 0.3.5 USB 完整版随附的代理内核是 MetaCubeX/mihomo **v1.19.33 官方未修改的 Linux ARM64 二进制**。插件包中不含 Windows 内核。USB 包保存原始 ELF 文件，外层 tar.gz 仅用于传输；启动时校验后复制到内存执行。
+长城 Clash 0.3.6 USB 完整版随附的代理内核是 MetaCubeX/mihomo **v1.19.33 官方未修改的 Linux ARM64 二进制**。插件包中不含 Windows 内核。USB 包保存原始 ELF 文件，外层 tar.gz 仅用于传输；启动时校验后复制到内存执行。
 
 对应提交：`3f27ef39f8c96bbfbc8b0b9bb10f5c9ef60149d8`。固定版本源码：[mihomo v1.19.33](https://github.com/MetaCubeX/mihomo/tree/v1.19.33)。许可证为 GNU GPL v3，全文随包提供。
 
@@ -29,4 +29,4 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off 
 
 参数依据上游版本中的 `Makefile`：`CGO_ENABLED=0`、`with_gvisor`、`-trimpath`。这里不宣称生成的文件与官方发布二进制逐字节相同；官方编译时间、构建环境等可能不同。其他主机可安装相应平台的 Go 1.26.10，使用同一源码与 vendor 构建。
 
-原创管理程序、界面、安装脚本和构建脚本另见 `cwclash-source-0.3.5.tar.gz`。其中包含 Go YAML 与 XZ 依赖源码；前端依赖由 `web/package-lock.json` 固定，可用 `npm ci` 安装。使用 `node scripts/build.mjs --usb` 构建 USB 完整包。
+原创管理程序、界面、安装脚本和构建脚本另见 `cwclash-source-0.3.6.tar.gz`。其中包含 Go YAML 与 XZ 依赖源码；前端依赖由 `web/package-lock.json` 固定，可用 `npm ci` 安装。使用 `node scripts/build.mjs --usb` 构建 USB 完整包。

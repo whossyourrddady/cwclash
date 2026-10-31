@@ -262,6 +262,28 @@ func TestNativeProtocolLoopback(t *testing.T) {
 	}
 	defer a.stopService(false)
 	proxyURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", s.Settings.MixedPort))
+	t.Run("profile-save-restart-boundary", func(t *testing.T) {
+		original := a.core
+		current := *findProfile(a.snapshot(), a.snapshot().ActiveProfile)
+		if _, err := a.saveProfile(context.Background(), Profile{Name: "inactive-fixture"}, string(profile)); err != nil {
+			t.Fatal(err)
+		}
+		if a.core != original || !a.isRunning() {
+			t.Fatal("inactive save restarted actual core")
+		}
+		if _, err := a.saveProfile(context.Background(), current, string(profile)); err != nil {
+			t.Fatal(err)
+		}
+		if a.core != original || !a.isRunning() {
+			t.Fatal("unchanged active save restarted actual core")
+		}
+		if _, err := a.saveProfile(context.Background(), current, string(profile)+"\n# changed active config\n"); err != nil {
+			t.Fatal(err)
+		}
+		if a.core == original || !a.isRunning() {
+			t.Fatal("changed active profile did not restart core")
+		}
+	})
 	type result struct {
 		Protocol string `json:"protocol"`
 		TCP      bool   `json:"tcp"`
@@ -504,6 +526,14 @@ func TestNativeProtocolLoopback(t *testing.T) {
 		}
 		if err = usb.stopService(false); err != nil {
 			t.Fatal(err)
+		}
+		preview, err := usb.previewGroups()
+		if err != nil {
+			t.Fatal(err)
+		}
+		cached := preview.(map[string]any)["providerPreviews"].([]providerPreview)
+		if len(cached) != 1 || len(cached[0].Nodes) != 1 || cached[0].Source != "本地缓存" {
+			t.Fatalf("actual mihomo cache was not visible while stopped: %+v", cached)
 		}
 		provider.Close()
 		fresh, err := NewWithStorage(usb.root, filepath.Join(t.TempDir(), "fresh-runtime"), "127.0.0.1:0", "usb-layout-test", true, StorageUSB)

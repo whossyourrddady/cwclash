@@ -602,14 +602,13 @@ func (a *App) scheduledUpdates() {
 				if profile.URL == "" || profile.UpdateHours <= 0 {
 					continue
 				}
-				last, err := time.Parse(time.RFC3339, profile.UpdatedAt)
-				if err == nil && time.Since(last) < time.Duration(profile.UpdateHours)*time.Hour {
+				if time.Now().Before(nextProfileUpdate(profile)) {
 					continue
 				}
 				if !a.op.TryLock() {
 					continue
 				}
-				err = a.updateProfile(a.ctx, profile.ID)
+				err := a.updateProfile(a.ctx, profile.ID)
 				a.op.Unlock()
 				if err != nil {
 					a.log("warning", "订阅自动更新失败，保留旧配置："+err.Error())

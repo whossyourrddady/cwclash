@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -240,7 +241,18 @@ func (a *App) normalizeProviderPaths(doc map[string]any) error {
 				}
 				p["path"] = filepath.Join(a.root, "assets", clean)
 			} else {
-				hash := sha256.Sum256([]byte(kind + ":" + name))
+				// Include source identity so equal names from different subscriptions cannot share cache.
+				identity := make(map[string]any, len(p))
+				for k, v := range p {
+					if k != "path" {
+						identity[k] = v
+					}
+				}
+				encoded, err := json.Marshal(identity)
+				if err != nil {
+					return fmt.Errorf("集合配置无法序列化")
+				}
+				hash := sha256.Sum256(append([]byte(kind+":"+name+":"), encoded...))
 				p["path"] = filepath.Join(a.coreDataDir(), "providers", hex.EncodeToString(hash[:12])+".yaml")
 			}
 			providers[name] = p
@@ -391,14 +403,16 @@ func (a *App) saveProfile(ctx context.Context, profile Profile, content string) 
 		return profile, oldErr
 	}
 	previous := a.snapshot()
-	wasRunning := a.isRunning()
-	if wasRunning {
+	restart := a.isRunning() && s.ActiveProfile == profile.ID && !bytes.Equal(old, []byte(content))
+	if restart {
 		if err = a.stopService(false); err != nil {
 			return profile, err
 		}
 	}
 	rollback := func(cause error) (Profile, error) {
-		_ = a.stopService(false)
+		if restart {
+			_ = a.stopService(false)
+		}
 		var restoreErr error
 		if oldErr == nil {
 			restoreErr = atomicWrite(path, old, 0600)
@@ -411,11 +425,11 @@ func (a *App) saveProfile(ctx context.Context, profile Profile, content string) 
 		if restoreErr == nil {
 			restoreErr = a.persist(previous)
 		}
-		if restoreErr == nil && wasRunning {
+		if restoreErr == nil && restart {
 			restoreErr = a.startService(false)
 		}
 		if restoreErr != nil {
-			a.setFailure("配置保存失败，自动回退未完全完成，代理保持关闭：" + restoreErr.Error())
+			a.setFailure("配置保存失败，自动回退未完全完成，请检查当前状态：" + restoreErr.Error())
 			return profile, fmt.Errorf("配置保存失败：%w；自动回退未完成：%s", cause, restoreErr)
 		}
 		return profile, fmt.Errorf("配置保存失败，已恢复上一配置：%w", cause)
@@ -424,6 +438,10 @@ func (a *App) saveProfile(ctx context.Context, profile Profile, content string) 
 		return rollback(err)
 	}
 	profile.UpdatedAt = time.Now().Format(time.RFC3339)
+	profile.LastAttempt = profile.UpdatedAt
+	profile.UpdateError = ""
+	profile.UpdateFailures = 0
+	profile.RetryAt = ""
 	found := false
 	for i := range s.Profiles {
 		if s.Profiles[i].ID == profile.ID {
@@ -438,10 +456,10 @@ func (a *App) saveProfile(ctx context.Context, profile Profile, content string) 
 	if s.ActiveProfile == "" {
 		s.ActiveProfile = profile.ID
 	}
-	if err = a.applyState(s); err != nil {
+	if err = a.persist(s); err != nil {
 		return rollback(err)
 	}
-	if wasRunning {
+	if restart {
 		if err = a.startService(false); err != nil {
 			return rollback(err)
 		}
@@ -462,6 +480,27 @@ func (a *App) updateProfile(ctx context.Context, id string) error {
 		return fmt.Errorf("本地配置没有订阅地址")
 	}
 	_, err := a.saveProfile(ctx, *p, "")
+	if err != nil {
+		next := a.snapshot()
+		for i := range next.Profiles {
+			if next.Profiles[i].ID != id {
+				continue
+			}
+			entry := &next.Profiles[i]
+			entry.LastAttempt = time.Now().Format(time.RFC3339)
+			entry.UpdateError = redact(err.Error())
+			if len(entry.UpdateError) > 2000 {
+				entry.UpdateError = "订阅更新失败，详见日志"
+			}
+			if entry.UpdateFailures < 7 {
+				entry.UpdateFailures++
+			}
+			entry.RetryAt = time.Now().Add(updateBackoff(entry.UpdateFailures)).Format(time.RFC3339)
+		}
+		if persistErr := a.persist(next); persistErr != nil {
+			return fmt.Errorf("%w；无法保存重试状态：%v", err, persistErr)
+		}
+	}
 	return err
 }
 

@@ -1,6 +1,6 @@
 export type Envelope<T> = { ok: boolean; data?: T; error?: string }
 export type Job = { id: string; kind: string; status: 'running' | 'done' | 'error'; message: string; result?: unknown }
-export type Profile = { id: string; name: string; url?: string; userAgent?: string; updateHours: number; updatedAt?: string; subscriptionInfo?: string }
+export type Profile = { id: string; name: string; url?: string; userAgent?: string; updateHours: number; updatedAt?: string; subscriptionInfo?: string; lastAttempt?: string; updateError?: string; updateFailures?: number; retryAt?: string }
 export type DevicePolicy = { id: string; name: string; ip: string; mac?: string; mode: 'direct' | 'rule' | 'proxy'; group?: string }
 export type Settings = {
   lanInterface: string; mixedPort: number; redirPort: number; tproxyPort: number; dnsPort: number; controllerPort: number

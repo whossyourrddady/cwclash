@@ -43,7 +43,13 @@ func (a *App) dispatch(ctx context.Context, action string, p json.RawMessage) (a
 		return a.status(ctx), nil
 	case "state.get":
 		s := a.snapshot()
-		return map[string]any{"state": s, "version": a.version, "dev": a.dev}, nil
+		updates := map[string]string{}
+		for _, p := range s.Profiles {
+			if next := nextProfileUpdate(p); !next.IsZero() {
+				updates[p.ID] = next.Format(time.RFC3339)
+			}
+		}
+		return map[string]any{"state": s, "version": a.version, "dev": a.dev, "nextUpdates": updates}, nil
 	case "probe":
 		return Probe(), nil
 	case "storage.inspect", "storage.cleanAsd", "storage.undoAsd":

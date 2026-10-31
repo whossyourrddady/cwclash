@@ -36,6 +36,10 @@ type Profile struct {
 	UpdateHours      int    `json:"updateHours"`
 	UpdatedAt        string `json:"updatedAt,omitempty"`
 	SubscriptionInfo string `json:"subscriptionInfo,omitempty"`
+	LastAttempt      string `json:"lastAttempt,omitempty"`
+	UpdateError      string `json:"updateError,omitempty"`
+	UpdateFailures   int    `json:"updateFailures,omitempty"`
+	RetryAt          string `json:"retryAt,omitempty"`
 }
 
 type DevicePolicy struct {
