@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -50,7 +51,7 @@ func runCommand(c Command) error {
 	defer cancel()
 	b, err := exec.CommandContext(ctx, c.Program, c.Args...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s %s 失败：%s", c.Program, strings.Join(c.Args, " "), strings.TrimSpace(string(b)))
+		return fmt.Errorf("%s %s 失败：%v；%s", c.Program, strings.Join(c.Args, " "), err, strings.TrimSpace(string(b)))
 	}
 	return nil
 }
@@ -67,7 +68,7 @@ func Probe() map[string]any {
 		interfaces = append(interfaces, map[string]any{"name": iface.Name, "addresses": ips, "up": iface.Flags&net.FlagUp != 0})
 	}
 	commands := map[string]bool{}
-	for _, name := range []string{"iptables", "ip6tables", "ip", "dbus", "nvram", "mount", "mke2fs", "mkfs.ext4"} {
+	for _, name := range []string{"iptables", "ip6tables", "ip", "dbus", "nvram", "mount", "mke2fs", "mkfs.ext4", "modprobe"} {
 		_, err := exec.LookPath(name)
 		commands[name] = err == nil
 	}
@@ -80,7 +81,7 @@ func Probe() map[string]any {
 			}
 		}
 	}
-	return map[string]any{"os": runtime.GOOS, "arch": runtime.GOARCH, "kernel": strings.TrimSpace(commandOutput("uname", "-r")), "model": strings.TrimSpace(commandOutput("nvram", "get", "productid")), "interfaces": interfaces, "commands": commands, "mounts": mounts}
+	return map[string]any{"os": runtime.GOOS, "arch": runtime.GOARCH, "kernel": strings.TrimSpace(commandOutput("uname", "-r")), "model": strings.TrimSpace(commandOutput("nvram", "get", "productid")), "interfaces": interfaces, "commands": commands, "mounts": mounts, "memoryKiB": memoryInfo(), "tproxyModules": commandOutput("lsmod"), "ipv4Targets": readDiagnosticFile("/proc/net/ip_tables_targets"), "ipv6Targets": readDiagnosticFile("/proc/net/ip6_tables_targets")}
 }
 
 func (a *App) ipv6Available() bool {
@@ -102,19 +103,9 @@ func (a *App) ipv6Available() bool {
 }
 
 func (a *App) ipv6ProxyCapable() bool {
-	if a.dev {
-		return false
-	}
-	if _, err := exec.LookPath("ip6tables"); err != nil {
-		return false
-	}
-	help := commandOutput("ip6tables", "-t", "mangle", "-j", "TPROXY", "-h")
-	if !strings.Contains(help, "--on-port") {
-		return false
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
-	defer cancel()
-	return exec.CommandContext(ctx, "ip6tables", "-t", "nat", "-S").Run() == nil
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return !a.dev && a.ipv6TPROXYReady
 }
 
 func (a *App) networkSummary(s State) map[string]any {
@@ -141,15 +132,31 @@ func (a *App) preflightNetwork(s State) error {
 			return fmt.Errorf("固件缺少 %s", name)
 		}
 	}
-	if !strings.Contains(commandOutput("iptables", "-t", "mangle", "-j", "TPROXY", "-h"), "--on-port") {
-		return fmt.Errorf("固件缺少 TPROXY 用户态模块，无法启用 TCP/UDP 透明代理")
+	v6Ready := false
+	if s.Settings.Mode != "direct" {
+		if err := ensureTPROXY("iptables", s.Settings.TProxyPort, runCommand); err != nil {
+			return err
+		}
 	}
 	if a.ipv6Available() {
 		if _, err := exec.LookPath("ip6tables"); err != nil {
 			return fmt.Errorf("局域网已启用 IPv6，但固件缺少 ip6tables，无法保证受控设备不绕过代理")
 		}
-		if s.Settings.IPv6 == "proxy" && !a.ipv6ProxyCapable() {
-			return fmt.Errorf("固件不具备完整 IPv6 TPROXY/DNS 接管能力，请选择自动防绕过")
+		if s.Settings.Mode != "direct" && s.Settings.IPv6 != "block" {
+			v6err := ensureTPROXY("ip6tables", s.Settings.TProxyPort, runCommand)
+			if v6err == nil {
+				v6err = runCommand(Command{"ip6tables", []string{"-t", "nat", "-S"}})
+			}
+			v6Ready = v6err == nil
+			if v6err != nil {
+				if cleanup := new(tproxyCleanupError); errors.As(v6err, &cleanup) {
+					return v6err
+				}
+				if s.Settings.IPv6 == "proxy" {
+					return fmt.Errorf("IPv6 透明代理不可用：%w", v6err)
+				}
+				a.log("warning", "IPv6 TPROXY 不可用，将使用 IPv6 防绕过："+v6err.Error())
+			}
 		}
 	}
 	owned := a.readOwnership()
@@ -174,6 +181,9 @@ func (a *App) preflightNetwork(s State) error {
 			return fmt.Errorf("策略规则 %d 已存在但缺少本插件所有权记录，未修改其规则", RulePriority)
 		}
 	}
+	a.mu.Lock()
+	a.ipv6TPROXYReady = v6Ready
+	a.mu.Unlock()
 	return nil
 }
 
@@ -548,4 +558,29 @@ func connectedDevices(policies []DevicePolicy) []ConnectedDevice {
 		}
 	}
 	return out
+}
+
+func readDiagnosticFile(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "不可读取"
+	}
+	return string(b)
+}
+func memoryInfo() map[string]uint64 {
+	values := map[string]uint64{}
+	for _, line := range strings.Split(readDiagnosticFile("/proc/meminfo"), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		key := strings.TrimSuffix(fields[0], ":")
+		switch key {
+		case "MemTotal", "MemAvailable", "MemFree", "Buffers", "Cached", "SwapTotal", "SwapFree":
+			if n, err := strconv.ParseUint(fields[1], 10, 64); err == nil {
+				values[key] = n
+			}
+		}
+	}
+	return values
 }

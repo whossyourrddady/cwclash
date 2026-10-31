@@ -116,6 +116,7 @@ type DNSQuery struct {
 }
 
 type App struct {
+	ipv6TPROXYReady bool // guarded by mu; established only by startup preflight
 	root            string
 	run             string
 	storageMode     string
