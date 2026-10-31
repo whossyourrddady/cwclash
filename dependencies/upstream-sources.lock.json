@@ -1,0 +1,27 @@
+{
+  "version": "v1.19.33",
+  "commit": "3f27ef39f8c96bbfbc8b0b9bb10f5c9ef60149d8",
+  "assets": [
+    {
+      "name": "mihomo-source-v1.19.33.tar.gz",
+      "url": "https://codeload.github.com/MetaCubeX/mihomo/tar.gz/3f27ef39f8c96bbfbc8b0b9bb10f5c9ef60149d8",
+      "size": 1283313,
+      "sha256": "ecda5f8c8a8a1d60bc088c2640c85d92c8f002c0686234a26bdf671735afe216",
+      "verification": "Official GitHub archive for the pinned release commit; digest recorded after HTTPS download."
+    },
+    {
+      "name": "vendor.tar.gz",
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.33/vendor.tar.gz",
+      "size": 17619729,
+      "sha256": "7ac4d4da0e6a29ef6ed18d2cf8f4c58d361d049ae364fd841acc883aa3a9e1cc",
+      "verification": "GitHub official release asset sha256 digest."
+    },
+    {
+      "name": "toolchain.tar.gz",
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.33/toolchain.tar.gz",
+      "size": 67776147,
+      "sha256": "a827640a1ae37475583ed82eb762ed563d40a4eeb83461acfb5ee8ff10fe4a55",
+      "verification": "GitHub official release asset sha256 digest."
+    }
+  ]
+}

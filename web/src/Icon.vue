@@ -1,0 +1,35 @@
+<script setup lang="ts">
+withDefaults(defineProps<{ name: string; size?: number }>(), { size: 20 })
+const paths: Record<string, string> = {
+  wall: 'M3 20V8h3V4h4v4h4V4h4v4h3v12M3 13h18M8 13v7m8-7v7M3 20h18',
+  home: 'm3 11 9-8 9 8M5 10v10h5v-6h4v6h5V10',
+  folder: 'M3 7V5h6l2 2h10v12H3V7Z',
+  globe: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM3 12h18M12 3c4 5 4 13 0 18-4-5-4-13 0-18Z',
+  rules: 'M9 5h12M9 12h12M9 19h12M3 5h1M3 12h1M3 19h1',
+  network: 'M12 3v5M4 16v-4h16v4M12 12v4M2 17h4v4H2Zm8 0h4v4h-4Zm8 0h4v4h-4ZM10 3h4',
+  shield: 'M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Zm-4 9 3 3 5-6',
+  logs: 'M5 3h10l4 4v14H5V3Zm9 0v5h5M8 12h8M8 16h8',
+  settings: 'M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2',
+  power: 'M12 2v10M6 5a9 9 0 1 0 12 0',
+  up: 'M12 20V4m-6 6 6-6 6 6',
+  down: 'M12 4v16m-6-6 6 6 6-6',
+  refresh: 'M20 7v5h-5M4 17v-5h5M19 8a8 8 0 0 0-13-3l-2 3m16 8-2 3A8 8 0 0 1 5 16',
+  plus: 'M12 4v16M4 12h16',
+  search: 'M10.5 3a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15ZM16 16l5 5',
+  chevron: 'm9 5 7 7-7 7',
+  close: 'm5 5 14 14M19 5 5 19',
+  check: 'm5 12 4 4L19 6',
+  clock: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM12 7v5l4 2',
+  cpu: 'M6 6h12v12H6Zm3 3h6v6H9ZM9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4',
+  moon: 'M20 15a9 9 0 0 1-11-11A9 9 0 1 0 20 15Z',
+  sun: 'M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1',
+  download: 'M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6',
+  upload: 'M12 16V4m-5 5 5-5 5 5M4 15v6h16v-6',
+  trash: 'M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7',
+  edit: 'm15 4 5 5M4 20l5-1L21 7l-5-5L4 14v6Z',
+  bolt: 'm13 2-9 12h7l-1 8 10-13h-7l1-7Z',
+  info: 'M12 11v6m0-10v1M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+  external: 'M14 3h7v7m0-7L10 14M10 3H3v18h18v-7',
+}
+</script>
+<template><svg :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="paths[name] || paths.info" /></svg></template>

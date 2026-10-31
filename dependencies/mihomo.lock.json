@@ -1,0 +1,19 @@
+{
+  "version": "v1.19.33",
+  "publishedAt": "2026-10-21T16:56:13Z",
+  "source": "https://github.com/MetaCubeX/mihomo/tree/v1.19.33",
+  "assets": [
+    {
+      "name": "mihomo-linux-arm64-v1.19.33.gz",
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.33/mihomo-linux-arm64-v1.19.33.gz",
+      "size": 20824326,
+      "sha256": "ba408b317080ee265c46cb923a50018c1b82cbd708551cdd46a1e3e307396187"
+    },
+    {
+      "name": "mihomo-windows-amd64-v1.19.33.zip",
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.33/mihomo-windows-amd64-v1.19.33.zip",
+      "size": 22512121,
+      "sha256": "6ab2180875f9f6fff8b19386d760daec257f66b45f72b3afc650634272fa837a"
+    }
+  ]
+}
