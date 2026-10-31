@@ -2,11 +2,13 @@
 
 面向 GT-AX6000、带 ASUS GO / Koolshare 软件中心的 ASUSWRT-Merlin 独立插件。以 mihomo 为代理内核，提供中文配置、订阅、代理组、规则、连接、DNS、设备分流、内核更新回退和备份管理。
 
-## 当前交付：0.3.1 USB 完整版
+## 当前交付：0.3.2 USB 完整版
 
-[下载 USB 安装包](https://github.com/whossyourrddady/cwclash/releases/download/v0.3.1/cwclash_hnd_v8_usb_0.3.1.tar.gz) · [版本说明、源码与校验文件](https://github.com/whossyourrddady/cwclash/releases/tag/v0.3.1)。这是私人仓库，需要使用有权限的 GitHub 账号访问。
+0.3.2 修复 0.3.1 版本文件 CRLF 导致安装器误报“管理程序无法在当前固件运行”。构建统一写入 LF，审计严格检查原始字节；安装日志分别报告启动失败和版本不匹配。0.3.1 此处失败发生在修改现有安装之前，直接使用新版完整包重试即可。
 
-使用官方 USB2JFFS 将健康的 EXT4 U 盘挂载到 `/jffs`，再通过软件中心离线安装 **`cwclash_hnd_v8_usb_0.3.1.tar.gz`**。一份包包含管理端、界面和官方 [mihomo v1.19.33](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.33) Linux ARM64 内核，无需先装引导包。
+[下载 USB 安装包](https://github.com/whossyourrddady/cwclash/releases/download/v0.3.2/cwclash_hnd_v8_usb_0.3.2.tar.gz) · [版本说明、源码与校验文件](https://github.com/whossyourrddady/cwclash/releases/tag/v0.3.2)。这是私人仓库，需要使用有权限的 GitHub 账号访问。
+
+使用官方 USB2JFFS 将健康的 EXT4 U 盘挂载到 `/jffs`，再通过软件中心离线安装 **`cwclash_hnd_v8_usb_0.3.2.tar.gz`**。一份包包含管理端、界面和官方 [mihomo v1.19.33](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.33) Linux ARM64 内核，无需先装引导包。
 
 - 包大小约 25.4 MB，持久文件约 58.5 MiB；安装器额外保留至少 128 MiB，供更新和回退使用。规则、GeoIP、配置和缓存还会继续占用 U 盘空间。
 - 安装前核对 `/jffs`、软件中心和插件目标目录确实位于同一块可写 USB EXT4 分区；条件不符时拒绝安装。
@@ -18,7 +20,7 @@
 
 0.2.1 支持 USB 硬件祖先直接出现在块设备路径中的布局，也支持 `/sys/block` 下通过整盘 `device` 链接访问硬件的旧布局；缺少 `/sys/dev/block` 索引时，改查 class/block 或 block 入口并核验相同的设备编号。相关内核接口见 [sysfs-dev](https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-dev)。
 
-## 0.3.1 日常操作优化
+## 0.3.2 日常操作优化
 
 概览分开展示管理服务、内核、DNS 模式与存储检查入口。DNS 模式不是连通性检测结果；存储显示最近一次手动检查结果。
 
@@ -28,7 +30,7 @@
 
 USB2JFFS 挂载成功后安装 USB 完整包。软件中心打开“长城 Clash”，导入 Clash/mihomo YAML 文件或订阅，选择代理组后启用。启用前关闭其他透明代理插件。不自动转换 fancyss 节点数据库或 Xray JSON。
 
-0.3.1 将页面直接放入固件的顶部、左侧菜单和内容框中，使用横向功能标签和紧凑表单，跟随 ASUSWRT / ROG / TUF / TS 皮肤。页面和数据接口均使用路由器同源地址，不再使用独立应用侧栏或另开窗口。更新后用 Ctrl+F5 刷新旧页面。
+0.3.2 将页面直接放入固件的顶部、左侧菜单和内容框中，使用横向功能标签和紧凑表单，跟随 ASUSWRT / ROG / TUF / TS 皮肤。页面和数据接口均使用路由器同源地址，不再使用独立应用侧栏或另开窗口。更新后用 Ctrl+F5 刷新旧页面。
 
 **尚未与 FlClash 完全对齐。** 订阅、代理组、测速、规则、连接、DNS、日志和本地备份已有实现；JavaScript 覆写、WebDAV、TUN 和独立的可视化节点/代理组编辑器尚未实现。平台差异、已实现边界及待办见 [FlClash 功能对照](docs/FLCLASH-PARITY.md)。
 

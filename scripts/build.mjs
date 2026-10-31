@@ -35,6 +35,9 @@ if (kernel.subarray(0,4).toString('hex') !== '7f454c46' || kernel[4] !== 2 || ke
 const sha256 = digest(kernel), file = `core-${sha256.slice(0,24)}`
 const stage = resolve(`build/stage-${Date.now()}`), pkg = join(stage, 'cwclash')
 await cp('package/cwclash', pkg, { recursive: true })
+// Shell command substitution removes LF, not CR. Canonicalize the version
+// independently of Windows checkout/editor line endings before hashing it.
+await writeFile(join(pkg, 'version'), version + '\n')
 await writeFile(join(pkg,'storage-mode'),storageMode+'\n')
 const aspPath = join(pkg, 'webs/Module_cwclash.asp')
 await writeFile(aspPath, (await readFile(aspPath, 'utf8')).replaceAll('__CW_VERSION__', version))

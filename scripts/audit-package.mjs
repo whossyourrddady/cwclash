@@ -44,7 +44,7 @@ for (const name of ['storage-mode','init.d/S98cwclash.sh','init.d/N98cwclash.sh'
 assert.equal(files.get('cwclash/storage-mode').toString().trim(),usb?'usb-jffs':'native')
 for (const [name,action] of [['S98cwclash.sh','manager-start'],['N98cwclash.sh','start_nat'],['T98cwclash.sh','manager-stop']]) assert.ok(files.get('cwclash/init.d/'+name).toString().includes('cwclash_service.sh '+action),'Incorrect firmware hook')
 for (const name of ['.valid', 'version', 'install.sh', 'uninstall.sh', 'bin/manager.tar.gz', 'bin/manager.sha256', 'bin/manager-archive.sha256', 'scripts/cwclash_service.sh', 'scripts/cwclash_api.sh', 'scripts/cwclash_compat.sh', 'webs/Module_cwclash.asp', 'res/cwclash/app.js', 'res/cwclash/style.css', 'res/icon-cwclash.png', 'LICENSE', 'THIRD_PARTY.md', 'licenses/Go-BSD-3-Clause.txt', 'licenses/Vue-MIT.txt', 'licenses/Vite-LICENSE.txt', 'licenses/yaml-v3-LICENSE.txt', 'licenses/xz-BSD-3-Clause.txt']) assert.ok(files.has('cwclash/' + name), `Missing required file: ${name}`)
-assert.equal(files.get('cwclash/version').toString().trim(), version)
+assert.equal(files.get('cwclash/version').toString(), version + '\n', 'Version must use exactly one LF, without CR or whitespace')
 assert.equal(files.get('cwclash/.valid').toString().trim(), 'hnd')
 const checks = files.get('cwclash/CHECKSUMS.sha256').toString().trim().split('\n')
 assert.equal(checks.length, files.size - 1, 'Some files are not covered by checksums')

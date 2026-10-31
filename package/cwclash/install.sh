@@ -32,7 +32,13 @@ CW_EXPECTED=$(cat "${CW_DIR}/bin/manager.sha256")
 CW_ACTUAL=$(cw_sha256 "${CW_CHECK}/cwclash.next") || exit 1
 [ "$CW_ACTUAL" = "$CW_EXPECTED" ] || { echo '管理程序校验失败，未更改现有安装'; exit 1; }
 chmod 700 "${CW_CHECK}/cwclash.next"
-[ "$("${CW_CHECK}/cwclash.next" version)" = "$CW_VERSION" ] || { echo '管理程序无法在当前固件运行，未更改现有安装'; exit 1; }
+if CW_MANAGER_VERSION=$("${CW_CHECK}/cwclash.next" version 2>&1); then
+  [ "$CW_MANAGER_VERSION" = "$CW_VERSION" ] || { echo "管理程序版本不匹配：包版本 [${CW_VERSION}]，程序返回 [${CW_MANAGER_VERSION}]，未更改现有安装"; exit 1; }
+else
+  CW_MANAGER_EXIT=$?
+  echo "管理程序启动失败，退出码 ${CW_MANAGER_EXIT}：${CW_MANAGER_VERSION}；未更改现有安装"
+  exit 1
+fi
 
 CW_RESERVE=4096
 if [ "$CW_STORAGE_MODE" = usb-jffs ]; then
