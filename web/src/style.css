@@ -137,3 +137,23 @@ body[data-cw-preview] #cwclash-app{max-width:728px;margin:0 auto}
   #cwclash-app .node-card{flex-wrap:nowrap}
   #cwclash-app .node-delay{margin:0;padding:3px}
 }
+
+/* Semantic state colors stay independent of the firmware accent. */
+#app[skin] #cwclash-app .positive,#app[skin] #cwclash-app .node-delay.good{color:#81d7a5}
+#app[skin] #cwclash-app .negative,#app[skin] #cwclash-app .node-delay.poor{color:#ff9a9f}
+#cwclash-app .warning{color:#edc575}
+#app[skin] #cwclash-app .connection-pill i,#app[skin] #cwclash-app .page-footer i.running{background:#81d7a5}
+#app[skin] #cwclash-app .connection-pill.offline i{background:#ff9a9f}
+#cwclash-app .draft-banner{border-color:#a78546;background:#514326;color:#ffe1a0;justify-content:space-between}
+#cwclash-app .subscription-quota{font-size:11px;margin:10px 0;line-height:1.8}
+#cwclash-app progress{width:100%;height:6px;accent-color:var(--accent)}
+#cwclash-app .favorite-button{border:0;background:transparent;color:var(--muted);padding:2px;font-size:18px}
+#cwclash-app .favorite-button[aria-pressed=true]{color:#edc575}
+#cwclash-app .node-select{min-width:0}
+#cwclash-app .node-copy strong{overflow-wrap:anywhere}
+#cwclash-app .health-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+#cwclash-app .health-grid .card{display:flex;flex-direction:column;gap:7px;padding:12px}
+#cwclash-app .health-grid strong{font-size:13px}
+#cwclash-app .health-grid span,#cwclash-app .health-grid small{font-size:11px;color:var(--muted)}
+#cwclash-app .device-traffic{font-size:11px;max-width:210px;overflow-wrap:anywhere;color:var(--muted)}
+@media(max-width:700px){#cwclash-app .health-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
