@@ -98,6 +98,10 @@ assert.equal((await readFile(`dist/${base}.sha256`, 'utf8')).trim(), `${sha}  ${
 const asp = files.get('cwclash/webs/Module_cwclash.asp').toString()
 assert.ok(asp.includes('Content-Security-Policy') && asp.includes('/res/cwclash/app.js'))
 assert.ok(asp.includes('/res/cwclash/app.js?v='+version),'UI cache version is missing')
+assert.ok(files.has('cwclash/res/cwclash/host.js'),'Firmware host adapter is missing')
+for (const id of ['TopBanner','mainMenu','subMenu','tabMenu','FormTitle','footer','cwclash-app']) assert.ok(asp.includes('id="'+id+'"'),'Missing native firmware container: '+id)
+assert.ok(asp.includes('/state.js') && asp.includes('/res/softcenter.css'),'Native firmware resources missing')
+assert.ok(asp.includes('/res/cwclash/host.js?v='+version),'Host cache version is missing')
 const report = { time: new Date().toISOString(), package: basename(path), bootstrap,storageMode:usb?'usb-jffs':'native', sha256: sha, bytes: archive.length, files: files.size, kernel: kernel?.version || null, checks: ['root directory', 'no traversal or symlinks', 'POSIX modes', 'LF shell scripts', 'complete SHA256 manifest', 'tar.gz manager roundtrip, archive and binary SHA256, static ELF64/AArch64', bootstrap ? 'no bundled core' : usb?'raw USB core original SHA256 and static ELF64/AArch64':'XZ core roundtrip, original SHA256 and static ELF64/AArch64', 'required licenses', 'local UI resources and CSP','explicit firmware hook arguments','storage layout marker'], routerAcceptance: false }
 await mkdir('output/verification', { recursive: true })
 await writeFile(`output/verification/package-audit${usb?'-usb':bootstrap?'-bootstrap':''}.json`, JSON.stringify(report, null, 2) + '\n')

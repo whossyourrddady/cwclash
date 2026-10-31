@@ -2,13 +2,13 @@
 
 面向 GT-AX6000、带 ASUS GO / Koolshare 软件中心的 ASUSWRT-Merlin 独立插件。以 mihomo 为代理内核，提供中文配置、订阅、代理组、规则、连接、DNS、设备分流、内核更新回退和备份管理。
 
-## 当前交付：0.2.1 USB 完整版
+## 当前交付：0.3.0 USB 完整版
 
-[下载 USB 安装包](https://github.com/whossyourrddady/cwclash/releases/download/v0.2.1/cwclash_hnd_v8_usb_0.2.1.tar.gz) · [版本说明、源码与校验文件](https://github.com/whossyourrddady/cwclash/releases/tag/v0.2.1)。这是私人仓库，需要使用有权限的 GitHub 账号访问。
+[下载 USB 安装包](https://github.com/whossyourrddady/cwclash/releases/download/v0.3.0/cwclash_hnd_v8_usb_0.3.0.tar.gz) · [版本说明、源码与校验文件](https://github.com/whossyourrddady/cwclash/releases/tag/v0.3.0)。这是私人仓库，需要使用有权限的 GitHub 账号访问。
 
-使用官方 USB2JFFS 将健康的 EXT4 U 盘挂载到 `/jffs`，再通过软件中心离线安装 **`cwclash_hnd_v8_usb_0.2.1.tar.gz`**。一份包包含管理端、界面和官方 [mihomo v1.19.33](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.33) Linux ARM64 内核，无需先装引导包。
+使用官方 USB2JFFS 将健康的 EXT4 U 盘挂载到 `/jffs`，再通过软件中心离线安装 **`cwclash_hnd_v8_usb_0.3.0.tar.gz`**。一份包包含管理端、界面和官方 [mihomo v1.19.33](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.33) Linux ARM64 内核，无需先装引导包。
 
-- 包大小约 25.40 MB，持久文件约 58.5 MiB；安装器额外保留至少 128 MiB，供更新和回退使用。规则、GeoIP、配置和缓存还会继续占用 U 盘空间。
+- 包大小约 25.4 MB，持久文件约 58.5 MiB；安装器额外保留至少 128 MiB，供更新和回退使用。规则、GeoIP、配置和缓存还会继续占用 U 盘空间。
 - 安装前核对 `/jffs`、软件中心和插件目标目录确实位于同一块可写 USB EXT4 分区；条件不符时拒绝安装。
 - 内核原始文件保存在 U 盘，启动时按块校验并复制到内存执行，省去 XZ 解压和整文件内存读取；升级保留当前版本和一个上一版本。
 - 配置、订阅、手动线路选择、规则与 GeoIP 缓存保存在 U 盘；运行程序、PID、控制令牌和网络所有权记录放在 `/tmp/cwclash-run`。
@@ -20,7 +20,13 @@
 
 ## 使用
 
-USB2JFFS 挂载成功后安装 USB 完整包。打开“长城 Clash”，导入 Clash/mihomo YAML 文件或订阅，选择代理组后启用。启用前关闭其他透明代理插件。不自动转换 fancyss 节点数据库或 Xray JSON。
+USB2JFFS 挂载成功后安装 USB 完整包。软件中心打开“长城 Clash”，导入 Clash/mihomo YAML 文件或订阅，选择代理组后启用。启用前关闭其他透明代理插件。不自动转换 fancyss 节点数据库或 Xray JSON。
+
+0.3.0 将页面直接放入固件的顶部、左侧菜单和内容框中，使用横向功能标签和紧凑表单，跟随 ASUSWRT / ROG / TUF / TS 皮肤。页面和数据接口均使用路由器同源地址，不再使用独立应用侧栏或另开窗口。更新后用 Ctrl+F5 刷新旧页面。
+
+**尚未与 FlClash 完全对齐。** 订阅、代理组、测速、规则、连接、DNS、日志和本地备份已有实现；JavaScript 覆写、WebDAV、TUN 和独立的可视化节点/代理组编辑器尚未实现。平台差异、已实现边界及待办见 [FlClash 功能对照](docs/FLCLASH-PARITY.md)。
+
+本轮通过构建、包审计和隔离界面验证，包括九页导航、表单、皮肤和样式隔离。测试使用真实插件 ASP 和前端资源，但外围固件及数据为替身；实际固件菜单、安装、代理和重启仍待实机验收。
 
 TCP 使用 REDIRECT，UDP 使用 TPROXY；设备规则按 IP 生效，双栈设备可分别设置 IPv4 和 IPv6 地址。MAC 仅用于识别展示。失败时清理本插件的代理与 DNS 接管；默认 Redir-Host，Fake-IP 客户端缓存可能需等待过期。
 

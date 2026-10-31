@@ -1,0 +1,44 @@
+# FlClash 功能对照（2026-10-31）
+
+**结论：长城 Clash 0.3.0 尚未与 FlClash 完全对齐。** 常用代理管理已有实现；JavaScript 覆写、WebDAV、TUN、可视化节点/代理组编辑等仍有差距。桌面和 Android 专属能力不能直接搬到路由器。
+
+对照依据为 [FlClash 当前中文 README](https://github.com/chen08209/FlClash/blob/main/README_zh_CN.md) 的公开功能项，以及本仓库实际页面、API 和配置处理代码。这里的“已实现”表示存在对应代码和操作入口，不等于所有固件/订阅/协议组合都经过验收；不是两个客户端的全量行为一致性测试。
+
+| 功能 | 长城 Clash 0.3.0 | 实现位置与边界 |
+| --- | --- | --- |
+| mihomo 内核 | 已实现 | 官方 Linux ARM64 内核，支持检查更新、离线导入和上一版回退；[upgrade.go](../internal/app/upgrade.go)、[core_storage.go](../internal/app/core_storage.go)。 |
+| 规则、全局、直连模式 | 已实现 | 概览切换，真实更新内核与本插件接管规则；[core.go](../internal/app/core.go)、[network.go](../internal/app/network.go)。 |
+| 代理组选择与延迟测试 | 已实现 | 策略组、节点选择、单个/批量测速、手动选择按配置保留；目前没有按延迟排序控件；[App.vue](../web/src/App.vue)、[api.go](../internal/app/api.go)。 |
+| 订阅链接、文件导入、编辑 | 已实现 | 多配置切换、YAML 编辑、自动更新、User-Agent、导出；订阅流量信息目前仅显示原始头字段，展示体验仍可完善。 |
+| 自定义规则与 YAML 覆写 | 已实现 | 域名/CIDR 分流、自定义 mihomo 规则、YAML 深度合并；路由器控制端口、接管方式等由插件最后统一设置；[config.go](../internal/app/config.go)。 |
+| JavaScript 覆写脚本 | 未实现 | YAML 覆写不能执行 FlClash 的 JavaScript 脚本，也不能宣称二者兼容。 |
+| 自定义节点和代理组 | 部分实现 | 可编辑 YAML 或覆写 proxies / proxy-groups；没有独立的可视化节点、组编辑器或 FlClash 编辑流程。 |
+| 在线/本地规则和代理集合 | 已实现 | 集合读取、更新、本地文件上传；USB 版保留 provider 缓存；[config.go](../internal/app/config.go)、[transfers.go](../internal/app/transfers.go)。 |
+| 实时连接与流量 | 已实现 | 流量趋势、来源设备、目标、策略链、命中规则、流量和关闭连接。界面显示前300条连接；没有桌面进程详情。 |
+| 独立请求分析视图 | 未完整对齐 | 当前以连接表和 DNS 历史提供信息，没有另一个独立请求分析页或 HTTP 内容分析。 |
+| DNS 查询与历史 | 已实现，但范围有限 | Fake-IP/Redir-Host、诊断、通过本插件 DNS 转发器的查询记录。不能据此声称监测所有客户端加密 DNS。后端已有缓存清空 API，当前页面未提供清空入口；[dns.go](../internal/app/dns.go)、[api.go](../internal/app/api.go)。 |
+| 日志 | 已实现 | 实时追加、级别过滤、搜索、暂停、导出；内存保留有限数量，非长期集中日志服务。 |
+| 本地备份恢复 | 已实现 | 配置、订阅、规则、设备设置和本地资源 ZIP；保留恢复前副本，恢复后代理停止；不含内核和在线缓存。格式为本插件自有格式，不兼容 FlClash 备份包。 |
+| WebDAV 备份恢复 | 未实现 | 没有 WebDAV 地址、认证或同步任务。 |
+| 系统代理 | 路由器替代方式 | 由 TCP REDIRECT / UDP TPROXY 接管局域网，另有混合代理端口；不修改每台电脑/手机的系统代理开关。 |
+| TUN 模式 | 未实现 | 编译配置明确设定 tun.enable=false；现用 REDIRECT/TPROXY，不能把它称为已实现 TUN。 |
+| 分应用/进程代理 | 不等价 | 提供设备 IPv4/IPv6 地址分流；无法从路由器侧识别终端 App/进程，find-process-mode=off。 |
+| 托盘、全局快捷键、磁贴、Android TV | 平台专属 | 本插件运行在路由器软件中心，没有桌面/Android 客户端组件。 |
+| 深链接导入与 Android 自动化 Action | 未实现/平台专属 | 目前通过网页导入；没有注册 clash:// 或 flclash://，也没有 Android Activity。 |
+| 主题与交互 | 按用户要求适配软件中心 | 0.3.0 使用固件顶部/左侧菜单，ASUSWRT / ROG / TUF / TS 皮肤和紧凑横向功能标签；不复制 Material You 动态取色或手机吸附面板。 |
+| 开机恢复 | 有路由器实现 | 通过软件中心 S98 / N98 / T98 钩子和持久启用状态恢复；还需 GT-AX6000 实机重启验收。 |
+
+## 仍需补齐的优先项
+
+1. 代理体验：订阅额度/到期可读展示、节点排序、节点与代理组可视化编辑。
+2. 配置能力：明确脚本接口及限制后实现 JavaScript 覆写；先完成兼容测试，再接受 FlClash 脚本。
+3. 数据管理：WebDAV 备份恢复、缓存清空入口和更完整的请求筛选。
+4. 网络模式：是否增加 TUN 需结合 GT-AX6000 的内核、驱动与网络恢复验收。当前 REDIRECT/TPROXY 仍是已实现方式。
+
+本轮完成软件中心界面整合和对照核查，没有把上面的缺项伪装成可用开关，也没有在路由器上自动切换网络模式。
+
+## 验证状态
+
+既有本地验证包括 Go 检查、安装模拟、管理桥、Windows 原生 mihomo 协议及 USB 缓存检查。0.3.0 的界面使用真实 ASP、host.js、构建后的 Vue/CSS，在完全拦截网络的本地浏览器夹具中验证九页导航、哈希跳转、配置弹窗、表单、四种皮肤和外部样式隔离。外层固件菜单与 RPC 数据是测试替身，截图均标注示例数据，不是路由器实机截图。
+
+0.2.1 USB 识别修复以及 0.3.0 新界面仍待实际固件安装、菜单兼容、透明代理、重启和故障恢复验收。
